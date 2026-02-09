@@ -6,245 +6,268 @@
     <title>GLTRADES | Trading Intelligence System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
         :root {
             --forest-green: #064e3b;
-            --lime-green: #84cc16;
-            --emerald-bg: #022c22;
-            --card-green: #065f46;
+            --emerald-base: #022c22;
+            --lime-accent: #84cc16;
         }
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #022c22; /* Dark Emerald/Forest Base */
-            color: #f8fafc;
-            margin: 0;
+        body { font-family: 'Inter', sans-serif; background-color: var(--emerald-base); color: #f8fafc; margin: 0; overflow: hidden; }
+
+        .glass-tile {
+            background: linear-gradient(135deg, rgba(6, 78, 59, 0.4) 0%, rgba(2, 44, 34, 0.8) 100%);
+            border: 1px solid rgba(132, 204, 22, 0.1);
+            backdrop-filter: blur(12px);
+            border-radius: 12px;
         }
 
-        /* UI Architecture */
-        .sidebar { background-color: #064e3b; transition: all 0.3s ease; }
-        .glass-tile { 
-            background: linear-gradient(135deg, rgba(6, 95, 70, 0.8) 0%, rgba(2, 44, 34, 0.9) 100%);
-            border: 1px solid rgba(132, 204, 22, 0.2);
-            backdrop-filter: blur(8px);
-            border-radius: 16px;
-        }
-
-        /* Hover Effects */
         .btn-lime {
-            background: linear-gradient(to right, #84cc16, #4d7c0f);
-            transition: all 0.3s ease;
-        }
-        .btn-lime:hover {
-            box-shadow: 0 0 15px rgba(132, 204, 22, 0.5);
-            transform: translateY(-1px);
+            background: linear-gradient(135deg, #84cc16 0%, #4d7c0f 100%);
+            color: #022c22;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* Active State */
-        .nav-active {
-            background-color: rgba(132, 204, 22, 0.1);
-            border-left: 4px solid #84cc16;
-            color: #84cc16;
+        .btn-lime:hover { transform: translateY(-1px); box-shadow: 0 0 20px rgba(132, 204, 22, 0.4); }
+
+        .nav-link { transition: all 0.2s; border-left: 4px solid transparent; color: #a7f3d0; }
+        .nav-link.active { background: rgba(132, 204, 22, 0.1); color: #84cc16; border-left: 4px solid #84cc16; }
+
+        .page-content { display: none; animation: fadeIn 0.3s ease-out; }
+        .page-content.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.99); }
+            to { opacity: 1; transform: scale(1); }
         }
 
-        /* Custom Scrollbar for Dashboard */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #022c22; }
-        ::-webkit-scrollbar-thumb { background: #065f46; border-radius: 10px; }
-
-        .chart-gradient {
-            background: linear-gradient(180deg, rgba(132, 204, 22, 0.15) 0%, rgba(2, 44, 34, 0) 100%);
+        input, select, textarea {
+            background: #052e16 !important;
+            border: 1px solid #064e3b !important;
+            color: white !important;
+            outline: none;
         }
+        input:focus { border-color: #84cc16 !important; }
     </style>
 </head>
-<body class="flex h-screen overflow-hidden">
+<body class="flex h-screen">
 
-    <aside class="sidebar w-64 h-full flex flex-col z-50 hidden md:flex border-r border-emerald-900">
+    <aside class="w-64 bg-[#052e16] border-r border-emerald-900/50 flex flex-col hidden lg:flex">
         <div class="p-8">
-            <h1 class="text-2xl font-bold tracking-tighter text-white">GL<span class="text-lime-500">TRADES</span></h1>
-            <p class="text-[10px] text-emerald-300 uppercase tracking-widest mt-1">Decision Optimization</p>
+            <h1 class="text-2xl font-black tracking-tighter text-white italic">GL<span class="text-lime-500">TRADES</span></h1>
+            <div class="h-1 w-8 bg-lime-500 rounded-full mt-1"></div>
         </div>
 
-        <nav class="flex-1 px-4 space-y-2">
-            <a href="#" class="nav-active flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium">
-                <i data-lucide="layout-dashboard" class="w-5 h-5"></i> Dashboard
-            </a>
-            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-emerald-100 hover:bg-emerald-800 transition-all">
-                <i data-lucide="list" class="w-5 h-5"></i> Trades
-            </a>
-            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-emerald-100 hover:bg-emerald-800 transition-all">
-                <i data-lucide="bar-chart-2" class="w-5 h-5"></i> Reports
-            </a>
-            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-emerald-100 hover:bg-emerald-800 transition-all">
-                <i data-lucide="book" class="w-5 h-5"></i> Playbooks
-            </a>
-            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-emerald-100 hover:bg-emerald-800 transition-all">
-                <i data-lucide="graduation-cap" class="w-5 h-5"></i> GL University
-            </a>
+        <nav class="flex-1 px-3 space-y-1" id="mainNav">
+            <button data-target="dashboard" class="nav-link active w-full flex items-center gap-3 px-4 py-3 rounded-r-xl text-sm font-bold">
+                <i data-lucide="layout-grid" class="w-4 h-4"></i> Dashboard
+            </button>
+            <button data-target="trades" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-r-xl text-sm font-medium">
+                <i data-lucide="database" class="w-4 h-4"></i> Trade Log
+            </button>
+            <button data-target="playbooks" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-r-xl text-sm font-medium">
+                <i data-lucide="book-marked" class="w-4 h-4"></i> Playbooks
+            </button>
+            <button data-target="journal" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-r-xl text-sm font-medium">
+                <i data-lucide="pen-tool" class="w-4 h-4"></i> Daily Journal
+            </button>
         </nav>
-
-        <div class="p-6 border-t border-emerald-800">
-            <div class="flex items-center gap-3 mb-6">
-                <div class="w-8 h-8 rounded-full bg-lime-500 flex items-center justify-center text-emerald-900 font-bold">JD</div>
-                <div class="text-xs">
-                    <p class="font-bold">John Doe</p>
-                    <p class="text-emerald-400">Pro Plan</p>
-                </div>
-            </div>
-            <a href="#" class="flex items-center gap-3 px-2 py-2 text-sm text-emerald-300 hover:text-white transition-colors">
-                <i data-lucide="settings" class="w-4 h-4"></i> Settings
-            </a>
-        </div>
     </aside>
 
-    <main class="flex-1 overflow-y-auto bg-[#022c22] relative">
-        
-        <header class="h-16 border-b border-emerald-900 flex items-center justify-between px-8 sticky top-0 bg-[#022c22]/80 backdrop-blur-md z-40">
-            <div class="flex items-center gap-4">
-                <i data-lucide="menu" class="md:hidden w-6 h-6 text-emerald-400"></i>
-                <h2 class="text-sm font-medium text-emerald-300">Command Center / <span class="text-white">Dashboard</span></h2>
-            </div>
+    <main class="flex-1 overflow-y-auto relative">
+        <header class="h-20 border-b border-emerald-900/50 flex items-center justify-between px-8 sticky top-0 bg-[#022c22]/90 backdrop-blur-md z-40">
+            <h2 id="pageTitle" class="text-xs font-black text-emerald-500 uppercase tracking-[0.2em]">Dashboard</h2>
             <div class="flex gap-4">
-                <button class="bg-emerald-900 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-emerald-800 border border-emerald-700">
-                    Upload CSV
-                </button>
-                <button class="btn-lime text-emerald-950 px-5 py-2 rounded-lg text-xs font-bold">
-                    + Manual Trade
-                </button>
+                <button onclick="toggleModal()" class="btn-lime px-6 py-2 rounded-lg text-xs font-black uppercase">Add Trade</button>
             </div>
         </header>
 
-        <div class="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div class="glass-tile p-6">
-                    <p class="text-emerald-400 text-[10px] uppercase font-bold tracking-widest">Total Net P/L</p>
-                    <h3 class="text-3xl font-bold mt-2 text-white">+$12,450.82</h3>
-                    <div class="mt-4 flex items-center gap-2 text-xs text-lime-400">
-                        <i data-lucide="trending-up" class="w-3 h-3"></i> +14% vs last month
-                    </div>
+        <div id="dashboard" class="page-content active p-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="glass-tile p-6 border-l-4 border-lime-500">
+                    <p class="text-emerald-500 text-[10px] font-bold uppercase">Net Profit</p>
+                    <h3 id="dash-pnl" class="text-3xl font-black text-white">$0.00</h3>
                 </div>
                 <div class="glass-tile p-6">
-                    <p class="text-emerald-400 text-[10px] uppercase font-bold tracking-widest">Win Rate</p>
-                    <h3 class="text-3xl font-bold mt-2 text-white">68.2%</h3>
-                    <div class="mt-4 w-full bg-emerald-900 h-1.5 rounded-full">
-                        <div class="bg-lime-500 h-full rounded-full" style="width: 68%"></div>
-                    </div>
+                    <p class="text-emerald-500 text-[10px] font-bold uppercase">Win Rate</p>
+                    <h3 id="dash-winrate" class="text-3xl font-black text-white">0%</h3>
                 </div>
                 <div class="glass-tile p-6">
-                    <p class="text-emerald-400 text-[10px] uppercase font-bold tracking-widest">Profit Factor</p>
-                    <h3 class="text-3xl font-bold mt-2 text-white">2.27</h3>
-                    <p class="text-[10px] text-emerald-500 mt-4 uppercase">Status: Healthy</p>
+                    <p class="text-emerald-500 text-[10px] font-bold uppercase">Total Trades</p>
+                    <h3 id="dash-count" class="text-3xl font-black text-white">0</h3>
                 </div>
                 <div class="glass-tile p-6">
-                    <p class="text-emerald-400 text-[10px] uppercase font-bold tracking-widest">Avg Win vs Loss</p>
-                    <h3 class="text-xl font-bold mt-2 text-white">$420 / <span class="text-red-400">-$185</span></h3>
-                    <p class="text-[10px] text-emerald-500 mt-4 uppercase">Expectancy: $227.30</p>
+                    <p class="text-emerald-500 text-[10px] font-bold uppercase">Profit Factor</p>
+                    <h3 class="text-3xl font-black text-white">2.1</h3>
                 </div>
             </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-2 glass-tile p-8 flex flex-col">
-                    <div class="flex justify-between items-center mb-6">
-                        <h4 class="font-bold text-emerald-100 text-lg">Growth Equity Curve</h4>
-                        <select class="bg-emerald-900 border-none text-xs rounded p-1 text-emerald-200">
-                            <option>Last 30 Days</option>
-                            <option>Last 90 Days</option>
-                        </select>
-                    </div>
-                    <div class="flex-1 h-64 chart-gradient relative rounded-xl border border-emerald-800/50">
-                        <svg class="absolute bottom-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            <path d="M0,80 L10,75 L25,85 L40,40 L60,55 L80,20 L100,10" fill="none" stroke="#84cc16" stroke-width="2" vector-effect="non-scaling-stroke"></path>
-                        </svg>
-                    </div>
-                </div>
-
-                <div class="glass-tile p-8">
-                    <h4 class="font-bold text-emerald-100 text-lg mb-6">Behavioral Tags</h4>
-                    <div class="flex flex-wrap gap-2">
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-800 text-emerald-200 border border-emerald-600">Breakout Setup</span>
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-lime-900/30 text-lime-400 border border-lime-700">Patience Level: High</span>
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-800 text-emerald-200 border border-emerald-600">Reversal Strategy</span>
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-amber-900/30 text-amber-400 border border-amber-700">Felt FOMO</span>
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-red-900/30 text-red-400 border border-red-700">Early Exit</span>
-                    </div>
-                    <button class="w-full mt-10 py-3 rounded-lg border border-dashed border-emerald-700 text-emerald-500 text-xs hover:text-lime-500 hover:border-lime-500 transition-all">
-                        + Manage Tag System
-                    </button>
-                </div>
+            <div class="glass-tile p-12 text-center border-dashed border-emerald-800">
+                <i data-lucide="trending-up" class="w-12 h-12 text-emerald-800 mx-auto mb-4"></i>
+                <p class="text-emerald-600 font-bold uppercase text-xs tracking-widest">Equity curve visualizes after 5 trades</p>
             </div>
+        </div>
 
-            <section class="space-y-4">
-                <div class="flex justify-between items-end">
-                    <div>
-                        <h3 class="text-xl font-bold">Trade Log</h3>
-                        <p class="text-xs text-emerald-500">Post-trade intelligence & execution review</p>
-                    </div>
-                    <div class="flex gap-2">
-                        <input type="text" placeholder="Search Symbol..." class="bg-emerald-950 border border-emerald-800 text-xs px-4 py-2 rounded-lg focus:outline-none focus:border-lime-500">
-                        <button class="bg-emerald-900 p-2 rounded-lg text-emerald-400"><i data-lucide="sliders-horizontal" class="w-4 h-4"></i></button>
-                    </div>
-                </div>
-
-                <div class="glass-tile overflow-hidden">
-                    <table class="w-full text-left text-sm">
-                        <thead class="bg-emerald-900/50 text-emerald-300">
-                            <tr>
-                                <th class="p-4 font-semibold uppercase text-[10px]">Symbol</th>
-                                <th class="p-4 font-semibold uppercase text-[10px]">Side</th>
-                                <th class="p-4 font-semibold uppercase text-[10px]">Entry Price</th>
-                                <th class="p-4 font-semibold uppercase text-[10px]">Exit Price</th>
-                                <th class="p-4 font-semibold uppercase text-[10px]">Strategy Tag</th>
-                                <th class="p-4 font-semibold uppercase text-[10px] text-right">Net P/L</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-emerald-900">
-                            <tr class="hover:bg-emerald-800/20 transition-colors">
-                                <td class="p-4 font-bold">NAS100</td>
-                                <td class="p-4"><span class="text-lime-500 font-bold">LONG</span></td>
-                                <td class="p-4">$18,240.50</td>
-                                <td class="p-4">$18,310.00</td>
-                                <td class="p-4"><span class="bg-emerald-800 px-2 py-1 rounded text-[10px]">High Volatility</span></td>
-                                <td class="p-4 text-right font-bold text-lime-400">+$1,240.00</td>
-                            </tr>
-                            <tr class="hover:bg-emerald-800/20 transition-colors">
-                                <td class="p-4 font-bold">XAUUSD</td>
-                                <td class="p-4"><span class="text-red-400 font-bold">SHORT</span></td>
-                                <td class="p-4">$2,342.10</td>
-                                <td class="p-4">$2,345.50</td>
-                                <td class="p-4"><span class="bg-emerald-800 px-2 py-1 rounded text-[10px]">Mean Reversion</span></td>
-                                <td class="p-4 text-right font-bold text-red-400">-$340.00</td>
-                            </tr>
-                            <tr class="hover:bg-emerald-800/20 transition-colors">
-                                <td class="p-4 font-bold">AAPL</td>
-                                <td class="p-4"><span class="text-lime-500 font-bold">LONG</span></td>
-                                <td class="p-4">$189.20</td>
-                                <td class="p-4">$192.40</td>
-                                <td class="p-4"><span class="bg-emerald-800 px-2 py-1 rounded text-[10px]">Gap Fill</span></td>
-                                <td class="p-4 text-right font-bold text-lime-400">+$620.00</td>
-                            </tr>
+        <div id="trades" class="page-content p-8">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-black italic uppercase">Execution History</h3>
+                <button onclick="clearTrades()" class="text-[10px] text-red-400 font-bold hover:underline">Clear All Data</button>
+            </div>
+            <div class="glass-tile overflow-hidden">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-emerald-900/40 text-emerald-500 font-bold uppercase">
+                        <tr>
+                            <th class="p-5">Ticker</th>
+                            <th class="p-5">Side</th>
+                            <th class="p-5">Entry</th>
+                            <th class="p-5 text-right">P/L</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trade-table-body" class="divide-y divide-emerald-900/50">
                         </tbody>
-                    </table>
+                </table>
+            </div>
+        </div>
+
+        <div id="playbooks" class="page-content p-8">
+            <h3 class="text-xl font-black mb-6">STRATEGY PLAYBOOKS</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="glass-tile p-6 border-t-2 border-lime-500">
+                    <h4 class="font-bold text-lime-400 mb-2">Silver Bullet</h4>
+                    <p class="text-xs text-emerald-300">Targeting FVG in the 10AM-11AM window.</p>
                 </div>
-            </section>
+                <div class="glass-tile p-6 border-t-2 border-emerald-500">
+                    <h4 class="font-bold text-emerald-400 mb-2">London Breakout</h4>
+                    <p class="text-xs text-emerald-300">Expansion of the Asian range during London Open.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="journal" class="page-content p-8">
+            <h3 class="text-xl font-black mb-6 uppercase">Daily Reflection</h3>
+            <div class="glass-tile p-8 space-y-4">
+                <textarea id="journal-text" class="w-full h-64 p-4 rounded-xl resize-none" placeholder="What did you learn today? Describe your emotional state..."></textarea>
+                <button onclick="saveJournal()" class="btn-lime px-8 py-3 rounded-lg font-bold text-sm">Save Entry</button>
+            </div>
         </div>
     </main>
 
+    <div id="tradeModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 bg-emerald-950/80 backdrop-blur-sm">
+        <div class="glass-tile max-w-sm w-full p-8 shadow-2xl border-lime-500/40">
+            <h3 class="text-xl font-black mb-6 text-white uppercase italic">Log Execution</h3>
+            <form id="tradeForm" class="space-y-4">
+                <input type="text" id="symbol" placeholder="Symbol (e.g. NAS100)" class="w-full p-4 rounded-lg font-bold" required>
+                <select id="side" class="w-full p-4 rounded-lg font-bold">
+                    <option value="BUY">BUY / LONG</option>
+                    <option value="SELL">SELL / SHORT</option>
+                </select>
+                <input type="number" id="entry" placeholder="Entry Price" class="w-full p-4 rounded-lg" required>
+                <input type="number" id="pnl" placeholder="Net Profit/Loss ($)" class="w-full p-4 rounded-lg font-bold" required>
+                
+                <div class="flex gap-2 pt-4">
+                    <button type="button" onclick="toggleModal()" class="flex-1 text-[10px] font-black uppercase text-emerald-500">Cancel</button>
+                    <button type="submit" class="flex-[2] btn-lime py-4 rounded-lg font-black text-sm uppercase">Save Trade</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
-        // Initialize Lucide Icons
         lucide.createIcons();
 
-        // Simple Tab Highlighting Logic
-        document.querySelectorAll('nav a').forEach(link => {
-            link.addEventListener('click', function(e) {
-                document.querySelectorAll('nav a').forEach(l => l.classList.remove('nav-active', 'text-lime-500'));
-                document.querySelectorAll('nav a').forEach(l => l.classList.add('text-emerald-100'));
-                this.classList.add('nav-active');
-                this.classList.remove('text-emerald-100');
+        // --- STATE MANAGEMENT ---
+        let trades = JSON.parse(localStorage.getItem('gltrades_data')) || [];
+
+        // --- NAVIGATION ---
+        const navButtons = document.querySelectorAll('.nav-link');
+        const pages = document.querySelectorAll('.page-content');
+        const pageTitle = document.getElementById('pageTitle');
+
+        navButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.getAttribute('data-target');
+                navButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                pages.forEach(p => p.classList.remove('active'));
+                document.getElementById(target).classList.add('active');
+                pageTitle.innerText = target;
+                if(target === 'dashboard') updateDashboard();
+                if(target === 'trades') renderTrades();
             });
         });
+
+        // --- MODAL & FORM ---
+        function toggleModal() {
+            document.getElementById('tradeModal').classList.toggle('hidden');
+        }
+
+        document.getElementById('tradeForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const newTrade = {
+                id: Date.now(),
+                symbol: document.getElementById('symbol').value.toUpperCase(),
+                side: document.getElementById('side').value,
+                entry: document.getElementById('entry').value,
+                pnl: parseFloat(document.getElementById('pnl').value)
+            };
+            trades.unshift(newTrade);
+            localStorage.setItem('gltrades_data', JSON.stringify(trades));
+            
+            e.target.reset();
+            toggleModal();
+            updateDashboard();
+            renderTrades();
+        });
+
+        // --- LOGIC ---
+        function renderTrades() {
+            const body = document.getElementById('trade-table-body');
+            body.innerHTML = trades.map(t => `
+                <tr class="hover:bg-white/5 transition-colors">
+                    <td class="p-5 font-black uppercase">${t.symbol}</td>
+                    <td class="p-5 font-bold ${t.side === 'BUY' ? 'text-lime-500' : 'text-red-400'}">${t.side}</td>
+                    <td class="p-5 text-emerald-300">$${t.entry}</td>
+                    <td class="p-5 text-right font-black ${t.pnl >= 0 ? 'text-lime-400' : 'text-red-500'}">
+                        ${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateDashboard() {
+            const totalPnl = trades.reduce((acc, curr) => acc + curr.pnl, 0);
+            const wins = trades.filter(t => t.pnl > 0).length;
+            const winRate = trades.length > 0 ? (wins / trades.length * 100).toFixed(1) : 0;
+
+            document.getElementById('dash-pnl').innerText = `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}`;
+            document.getElementById('dash-pnl').className = `text-3xl font-black ${totalPnl >= 0 ? 'text-lime-400' : 'text-red-500'}`;
+            document.getElementById('dash-winrate').innerText = `${winRate}%`;
+            document.getElementById('dash-count').innerText = trades.length;
+        }
+
+        function clearTrades() {
+            if(confirm("Delete all trade data? This cannot be undone.")) {
+                trades = [];
+                localStorage.removeItem('gltrades_data');
+                updateDashboard();
+                renderTrades();
+            }
+        }
+
+        function saveJournal() {
+            const text = document.getElementById('journal-text').value;
+            localStorage.setItem('gltrades_journal', text);
+            alert("Journal Entry Saved!");
+        }
+
+        // Initialize
+        window.onload = () => {
+            updateDashboard();
+            renderTrades();
+            const savedJournal = localStorage.getItem('gltrades_journal');
+            if(savedJournal) document.getElementById('journal-text').value = savedJournal;
+        };
     </script>
 </body>
 </html>
