@@ -3,271 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GLTRADES | Trading Intelligence System</title>
+    <title>GLTRADES | Trading Intelligence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --forest-green: #064e3b;
-            --emerald-base: #022c22;
-            --lime-accent: #84cc16;
-        }
+        :root { --forest: #052e16; --emerald: #022c22; --lime: #84cc16; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--emerald); color: white; margin: 0; overflow: hidden; }
+        
+        /* Page Visibility Logic */
+        .page-section { display: none; }
+        .page-section.active { display: block; animation: fadeIn 0.3s ease; }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        body { font-family: 'Inter', sans-serif; background-color: var(--emerald-base); color: #f8fafc; margin: 0; overflow: hidden; }
-
-        .glass-tile {
-            background: linear-gradient(135deg, rgba(6, 78, 59, 0.4) 0%, rgba(2, 44, 34, 0.8) 100%);
-            border: 1px solid rgba(132, 204, 22, 0.1);
-            backdrop-filter: blur(12px);
-            border-radius: 12px;
-        }
-
-        .btn-lime {
-            background: linear-gradient(135deg, #84cc16 0%, #4d7c0f 100%);
-            color: #022c22;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .btn-lime:hover { transform: translateY(-1px); box-shadow: 0 0 20px rgba(132, 204, 22, 0.4); }
-
-        .nav-link { transition: all 0.2s; border-left: 4px solid transparent; color: #a7f3d0; }
-        .nav-link.active { background: rgba(132, 204, 22, 0.1); color: #84cc16; border-left: 4px solid #84cc16; }
-
-        .page-content { display: none; animation: fadeIn 0.3s ease-out; }
-        .page-content.active { display: block; }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.99); }
-            to { opacity: 1; transform: scale(1); }
-        }
-
-        input, select, textarea {
-            background: #052e16 !important;
-            border: 1px solid #064e3b !important;
-            color: white !important;
-            outline: none;
-        }
-        input:focus { border-color: #84cc16 !important; }
+        .nav-btn { border-left: 4px solid transparent; transition: 0.2s; }
+        .nav-btn.active { border-left: 4px solid var(--lime); background: rgba(132, 204, 22, 0.1); color: var(--lime); }
+        .glass { background: rgba(6, 78, 59, 0.4); border: 1px solid rgba(132, 204, 22, 0.1); border-radius: 12px; }
     </style>
 </head>
 <body class="flex h-screen">
 
-    <aside class="w-64 bg-[#052e16] border-r border-emerald-900/50 flex flex-col hidden lg:flex">
-        <div class="p-8">
-            <h1 class="text-2xl font-black tracking-tighter text-white italic">GL<span class="text-lime-500">TRADES</span></h1>
-            <div class="h-1 w-8 bg-lime-500 rounded-full mt-1"></div>
-        </div>
-
-        <nav class="flex-1 px-3 space-y-1" id="mainNav">
-            <button data-target="dashboard" class="nav-link active w-full flex items-center gap-3 px-4 py-3 rounded-r-xl text-sm font-bold">
-                <i data-lucide="layout-grid" class="w-4 h-4"></i> Dashboard
+    <aside class="w-64 bg-[#052e16] border-r border-emerald-900/50 flex flex-col">
+        <div class="p-8"><h1 class="text-2xl font-black italic">GL<span class="text-lime-500">TRADES</span></h1></div>
+        
+        <nav class="flex-1 px-2 space-y-1" id="nav-container">
+            <button onclick="showPage('dashboard', this)" class="nav-btn active w-full flex items-center gap-3 px-6 py-4 text-sm font-bold">
+                <i data-lucide="layout-grid"></i> Dashboard
             </button>
-            <button data-target="trades" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-r-xl text-sm font-medium">
-                <i data-lucide="database" class="w-4 h-4"></i> Trade Log
+            <button onclick="showPage('trades', this)" class="nav-btn w-full flex items-center gap-3 px-6 py-4 text-sm font-medium">
+                <i data-lucide="database"></i> Trades
             </button>
-            <button data-target="playbooks" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-r-xl text-sm font-medium">
-                <i data-lucide="book-marked" class="w-4 h-4"></i> Playbooks
+            <button onclick="showPage('reports', this)" class="nav-btn w-full flex items-center gap-3 px-6 py-4 text-sm font-medium">
+                <i data-lucide="bar-chart-2"></i> Reports
             </button>
-            <button data-target="journal" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-r-xl text-sm font-medium">
-                <i data-lucide="pen-tool" class="w-4 h-4"></i> Daily Journal
+            <button onclick="showPage('playbooks', this)" class="nav-btn w-full flex items-center gap-3 px-6 py-4 text-sm font-medium">
+                <i data-lucide="book-open"></i> Playbooks
             </button>
         </nav>
     </aside>
 
-    <main class="flex-1 overflow-y-auto relative">
-        <header class="h-20 border-b border-emerald-900/50 flex items-center justify-between px-8 sticky top-0 bg-[#022c22]/90 backdrop-blur-md z-40">
-            <h2 id="pageTitle" class="text-xs font-black text-emerald-500 uppercase tracking-[0.2em]">Dashboard</h2>
-            <div class="flex gap-4">
-                <button onclick="toggleModal()" class="btn-lime px-6 py-2 rounded-lg text-xs font-black uppercase">Add Trade</button>
-            </div>
+    <main class="flex-1 overflow-y-auto">
+        <header class="h-20 border-b border-emerald-900/50 flex items-center px-8 bg-emerald-950/50 backdrop-blur-md sticky top-0">
+            <h2 id="view-title" class="text-xs font-black uppercase tracking-widest text-emerald-500">Dashboard</h2>
         </header>
 
-        <div id="dashboard" class="page-content active p-8">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div class="glass-tile p-6 border-l-4 border-lime-500">
-                    <p class="text-emerald-500 text-[10px] font-bold uppercase">Net Profit</p>
-                    <h3 id="dash-pnl" class="text-3xl font-black text-white">$0.00</h3>
-                </div>
-                <div class="glass-tile p-6">
-                    <p class="text-emerald-500 text-[10px] font-bold uppercase">Win Rate</p>
-                    <h3 id="dash-winrate" class="text-3xl font-black text-white">0%</h3>
-                </div>
-                <div class="glass-tile p-6">
-                    <p class="text-emerald-500 text-[10px] font-bold uppercase">Total Trades</p>
-                    <h3 id="dash-count" class="text-3xl font-black text-white">0</h3>
-                </div>
-                <div class="glass-tile p-6">
-                    <p class="text-emerald-500 text-[10px] font-bold uppercase">Profit Factor</p>
-                    <h3 class="text-3xl font-black text-white">2.1</h3>
-                </div>
+        <section id="dashboard" class="page-section active p-10">
+            <div class="grid grid-cols-3 gap-6 mb-10">
+                <div class="glass p-8"><p class="text-xs text-emerald-500 font-bold uppercase">Net P/L</p><h3 class="text-3xl font-black text-lime-400">+$12,450</h3></div>
+                <div class="glass p-8"><p class="text-xs text-emerald-500 font-bold uppercase">Win Rate</p><h3 class="text-3xl font-black">68%</h3></div>
+                <div class="glass p-8"><p class="text-xs text-emerald-500 font-bold uppercase">Profit Factor</p><h3 class="text-3xl font-black">2.2</h3></div>
             </div>
-            <div class="glass-tile p-12 text-center border-dashed border-emerald-800">
-                <i data-lucide="trending-up" class="w-12 h-12 text-emerald-800 mx-auto mb-4"></i>
-                <p class="text-emerald-600 font-bold uppercase text-xs tracking-widest">Equity curve visualizes after 5 trades</p>
+            <div class="glass p-20 text-center border-dashed border-emerald-800">
+                <p class="text-emerald-700 font-bold uppercase tracking-widest">Performance Curve Loading...</p>
             </div>
-        </div>
+        </section>
 
-        <div id="trades" class="page-content p-8">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-black italic uppercase">Execution History</h3>
-                <button onclick="clearTrades()" class="text-[10px] text-red-400 font-bold hover:underline">Clear All Data</button>
-            </div>
-            <div class="glass-tile overflow-hidden">
-                <table class="w-full text-left text-xs">
-                    <thead class="bg-emerald-900/40 text-emerald-500 font-bold uppercase">
-                        <tr>
-                            <th class="p-5">Ticker</th>
-                            <th class="p-5">Side</th>
-                            <th class="p-5">Entry</th>
-                            <th class="p-5 text-right">P/L</th>
-                        </tr>
+        <section id="trades" class="page-section p-10">
+            <h3 class="text-xl font-bold mb-6">Trade History</h3>
+            <div class="glass overflow-hidden">
+                <table class="w-full text-left">
+                    <thead class="bg-emerald-900/50 text-emerald-400 text-[10px] uppercase">
+                        <tr><th class="p-4">Symbol</th><th class="p-4">Side</th><th class="p-4 text-right">Profit</th></tr>
                     </thead>
-                    <tbody id="trade-table-body" class="divide-y divide-emerald-900/50">
-                        </tbody>
+                    <tbody class="text-sm">
+                        <tr class="border-t border-emerald-900/30"><td class="p-4 font-bold">NAS100</td><td class="p-4 text-lime-500">LONG</td><td class="p-4 text-right text-lime-400">+$630</td></tr>
+                        <tr class="border-t border-emerald-900/30"><td class="p-4 font-bold">XAUUSD</td><td class="p-4 text-red-500">SHORT</td><td class="p-4 text-right text-red-400">-$210</td></tr>
+                    </tbody>
                 </table>
             </div>
-        </div>
+        </section>
 
-        <div id="playbooks" class="page-content p-8">
-            <h3 class="text-xl font-black mb-6">STRATEGY PLAYBOOKS</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="glass-tile p-6 border-t-2 border-lime-500">
-                    <h4 class="font-bold text-lime-400 mb-2">Silver Bullet</h4>
-                    <p class="text-xs text-emerald-300">Targeting FVG in the 10AM-11AM window.</p>
-                </div>
-                <div class="glass-tile p-6 border-t-2 border-emerald-500">
-                    <h4 class="font-bold text-emerald-400 mb-2">London Breakout</h4>
-                    <p class="text-xs text-emerald-300">Expansion of the Asian range during London Open.</p>
-                </div>
+        <section id="reports" class="page-section p-10">
+            <h3 class="text-xl font-bold mb-6">Advanced Analytics</h3>
+            <div class="grid grid-cols-2 gap-6">
+                <div class="glass h-48 flex items-center justify-center text-emerald-600 font-bold uppercase">Volume Analysis</div>
+                <div class="glass h-48 flex items-center justify-center text-emerald-600 font-bold uppercase">Time of Day Edge</div>
             </div>
-        </div>
+        </section>
 
-        <div id="journal" class="page-content p-8">
-            <h3 class="text-xl font-black mb-6 uppercase">Daily Reflection</h3>
-            <div class="glass-tile p-8 space-y-4">
-                <textarea id="journal-text" class="w-full h-64 p-4 rounded-xl resize-none" placeholder="What did you learn today? Describe your emotional state..."></textarea>
-                <button onclick="saveJournal()" class="btn-lime px-8 py-3 rounded-lg font-bold text-sm">Save Entry</button>
+        <section id="playbooks" class="page-section p-10">
+            <h3 class="text-xl font-bold mb-6">Active Playbooks</h3>
+            <div class="glass p-10 border-l-4 border-lime-500">
+                <h4 class="text-lime-500 font-bold">Silver Bullet Strategy</h4>
+                <p class="text-sm text-emerald-200 mt-2">Targeting FVG during NY AM session. 2R minimum requirement.</p>
             </div>
-        </div>
+        </section>
+
     </main>
 
-    <div id="tradeModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 bg-emerald-950/80 backdrop-blur-sm">
-        <div class="glass-tile max-w-sm w-full p-8 shadow-2xl border-lime-500/40">
-            <h3 class="text-xl font-black mb-6 text-white uppercase italic">Log Execution</h3>
-            <form id="tradeForm" class="space-y-4">
-                <input type="text" id="symbol" placeholder="Symbol (e.g. NAS100)" class="w-full p-4 rounded-lg font-bold" required>
-                <select id="side" class="w-full p-4 rounded-lg font-bold">
-                    <option value="BUY">BUY / LONG</option>
-                    <option value="SELL">SELL / SHORT</option>
-                </select>
-                <input type="number" id="entry" placeholder="Entry Price" class="w-full p-4 rounded-lg" required>
-                <input type="number" id="pnl" placeholder="Net Profit/Loss ($)" class="w-full p-4 rounded-lg font-bold" required>
-                
-                <div class="flex gap-2 pt-4">
-                    <button type="button" onclick="toggleModal()" class="flex-1 text-[10px] font-black uppercase text-emerald-500">Cancel</button>
-                    <button type="submit" class="flex-[2] btn-lime py-4 rounded-lg font-black text-sm uppercase">Save Trade</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <script>
+        // 1. Initialize Icons
         lucide.createIcons();
 
-        // --- STATE MANAGEMENT ---
-        let trades = JSON.parse(localStorage.getItem('gltrades_data')) || [];
-
-        // --- NAVIGATION ---
-        const navButtons = document.querySelectorAll('.nav-link');
-        const pages = document.querySelectorAll('.page-content');
-        const pageTitle = document.getElementById('pageTitle');
-
-        navButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const target = btn.getAttribute('data-target');
-                navButtons.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                pages.forEach(p => p.classList.remove('active'));
-                document.getElementById(target).classList.add('active');
-                pageTitle.innerText = target;
-                if(target === 'dashboard') updateDashboard();
-                if(target === 'trades') renderTrades();
+        // 2. The Navigation Function
+        function showPage(pageId, btnElement) {
+            // Hide all pages
+            document.querySelectorAll('.page-section').forEach(page => {
+                page.classList.remove('active');
             });
-        });
 
-        // --- MODAL & FORM ---
-        function toggleModal() {
-            document.getElementById('tradeModal').classList.toggle('hidden');
+            // Remove active style from all buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.classList.replace('font-bold', 'font-medium');
+            });
+
+            // Show the selected page
+            document.getElementById(pageId).classList.add('active');
+
+            // Set button to active
+            btnElement.classList.add('active');
+            btnElement.classList.replace('font-medium', 'font-bold');
+
+            // Update Header Title
+            document.getElementById('view-title').innerText = pageId;
         }
-
-        document.getElementById('tradeForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const newTrade = {
-                id: Date.now(),
-                symbol: document.getElementById('symbol').value.toUpperCase(),
-                side: document.getElementById('side').value,
-                entry: document.getElementById('entry').value,
-                pnl: parseFloat(document.getElementById('pnl').value)
-            };
-            trades.unshift(newTrade);
-            localStorage.setItem('gltrades_data', JSON.stringify(trades));
-            
-            e.target.reset();
-            toggleModal();
-            updateDashboard();
-            renderTrades();
-        });
-
-        // --- LOGIC ---
-        function renderTrades() {
-            const body = document.getElementById('trade-table-body');
-            body.innerHTML = trades.map(t => `
-                <tr class="hover:bg-white/5 transition-colors">
-                    <td class="p-5 font-black uppercase">${t.symbol}</td>
-                    <td class="p-5 font-bold ${t.side === 'BUY' ? 'text-lime-500' : 'text-red-400'}">${t.side}</td>
-                    <td class="p-5 text-emerald-300">$${t.entry}</td>
-                    <td class="p-5 text-right font-black ${t.pnl >= 0 ? 'text-lime-400' : 'text-red-500'}">
-                        ${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        function updateDashboard() {
-            const totalPnl = trades.reduce((acc, curr) => acc + curr.pnl, 0);
-            const wins = trades.filter(t => t.pnl > 0).length;
-            const winRate = trades.length > 0 ? (wins / trades.length * 100).toFixed(1) : 0;
-
-            document.getElementById('dash-pnl').innerText = `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}`;
-            document.getElementById('dash-pnl').className = `text-3xl font-black ${totalPnl >= 0 ? 'text-lime-400' : 'text-red-500'}`;
-            document.getElementById('dash-winrate').innerText = `${winRate}%`;
-            document.getElementById('dash-count').innerText = trades.length;
-        }
-
-        function clearTrades() {
-            if(confirm("Delete all trade data? This cannot be undone.")) {
-                trades = [];
-                localStorage.removeItem('gltrades_data');
-                updateDashboard();
-                renderTrades();
-            }
-        }
-
-        function saveJournal() {
-            const text = document.getElementById('journal-text').value;
-            localStorage.setItem('gltrades_journal', text);
-            alert("Journal Entry Saved!");
-        }
-
-        // Initialize
-        window.onload = () => {
-            updateDashboard();
-            renderTrades();
-            const savedJournal = localStorage.getItem('gltrades_journal');
-            if(savedJournal) document.getElementById('journal-text').value = savedJournal;
-        };
     </script>
 </body>
 </html>
