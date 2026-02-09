@@ -3,248 +3,184 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GLTRADES | Trading Intelligence System</title>
+    <title>GLTRADES | Intelligence System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
     <style>
-        :root {
-            --forest-green: #064e3b;
-            --lime-green: #84cc16;
-            --emerald-bg: #022c22;
-            --card-green: #065f46;
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #09090b; color: #fafafa; margin: 0; }
+        .glass-card { background: rgba(18, 18, 20, 0.8); border: 1px solid rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); }
+        
+        /* Navigation Styles */
+        .sidebar-link { transition: all 0.2s; cursor: pointer; border-left: 3px solid transparent; }
+        .sidebar-link.active-nav { border-left: 3px solid #3b82f6; background: rgba(59, 130, 246, 0.08); color: #3b82f6 !important; }
+        
+        /* Page Control */
+        .page-view { display: none; }
+        .page-view.active { display: block; animation: fadeIn 0.2s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #022c22; /* Dark Emerald/Forest Base */
-            color: #f8fafc;
-            margin: 0;
-        }
-
-        /* UI Architecture */
-        .sidebar { background-color: #064e3b; transition: all 0.3s ease; }
-        .glass-tile { 
-            background: linear-gradient(135deg, rgba(6, 95, 70, 0.8) 0%, rgba(2, 44, 34, 0.9) 100%);
-            border: 1px solid rgba(132, 204, 22, 0.2);
-            backdrop-filter: blur(8px);
-            border-radius: 16px;
-        }
-
-        /* Hover Effects */
-        .btn-lime {
-            background: linear-gradient(to right, #84cc16, #4d7c0f);
-            transition: all 0.3s ease;
-        }
-        .btn-lime:hover {
-            box-shadow: 0 0 15px rgba(132, 204, 22, 0.5);
-            transform: translateY(-1px);
-        }
-
-        /* Active State */
-        .nav-active {
-            background-color: rgba(132, 204, 22, 0.1);
-            border-left: 4px solid #84cc16;
-            color: #84cc16;
-        }
-
-        /* Custom Scrollbar for Dashboard */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #022c22; }
-        ::-webkit-scrollbar-thumb { background: #065f46; border-radius: 10px; }
-
-        .chart-gradient {
-            background: linear-gradient(180deg, rgba(132, 204, 22, 0.15) 0%, rgba(2, 44, 34, 0) 100%);
-        }
+        #tradeModal { background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); }
+        input { background: #18181b !important; border: 1px solid #27272a !important; color: white !important; }
     </style>
 </head>
-<body class="flex h-screen overflow-hidden">
+<body class="flex min-h-screen overflow-hidden">
 
-    <aside class="sidebar w-64 h-full flex flex-col z-50 hidden md:flex border-r border-emerald-900">
+    <aside class="w-64 border-r border-white/5 flex flex-col bg-[#09090b] h-screen">
         <div class="p-8">
-            <h1 class="text-2xl font-bold tracking-tighter text-white">GL<span class="text-lime-500">TRADES</span></h1>
-            <p class="text-[10px] text-emerald-300 uppercase tracking-widest mt-1">Decision Optimization</p>
+            <h1 class="text-xl font-bold tracking-tighter text-white uppercase italic">GL<span class="text-blue-500">TRADES</span></h1>
         </div>
-
+        
         <nav class="flex-1 px-4 space-y-2">
-            <a href="#" class="nav-active flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium">
-                <i data-lucide="layout-dashboard" class="w-5 h-5"></i> Dashboard
-            </a>
-            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-emerald-100 hover:bg-emerald-800 transition-all">
-                <i data-lucide="list" class="w-5 h-5"></i> Trades
-            </a>
-            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-emerald-100 hover:bg-emerald-800 transition-all">
-                <i data-lucide="bar-chart-2" class="w-5 h-5"></i> Reports
-            </a>
-            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-emerald-100 hover:bg-emerald-800 transition-all">
-                <i data-lucide="book" class="w-5 h-5"></i> Playbooks
-            </a>
-            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-emerald-100 hover:bg-emerald-800 transition-all">
-                <i data-lucide="graduation-cap" class="w-5 h-5"></i> GL University
-            </a>
-        </nav>
-
-        <div class="p-6 border-t border-emerald-800">
-            <div class="flex items-center gap-3 mb-6">
-                <div class="w-8 h-8 rounded-full bg-lime-500 flex items-center justify-center text-emerald-900 font-bold">JD</div>
-                <div class="text-xs">
-                    <p class="font-bold">John Doe</p>
-                    <p class="text-emerald-400">Pro Plan</p>
-                </div>
+            <div onclick="navigateTo('dashboard', this)" class="sidebar-link active-nav flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-zinc-400">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
             </div>
-            <a href="#" class="flex items-center gap-3 px-2 py-2 text-sm text-emerald-300 hover:text-white transition-colors">
-                <i data-lucide="settings" class="w-4 h-4"></i> Settings
-            </a>
-        </div>
+            <div onclick="navigateTo('tradelog', this)" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-zinc-400">
+                <i data-lucide="book-open" class="w-4 h-4"></i> Trade Log
+            </div>
+            <div onclick="navigateTo('analytics', this)" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-zinc-400">
+                <i data-lucide="bar-chart-3" class="w-4 h-4"></i> Analytics
+            </div>
+        </nav>
     </aside>
 
-    <main class="flex-1 overflow-y-auto bg-[#022c22] relative">
-        
-        <header class="h-16 border-b border-emerald-900 flex items-center justify-between px-8 sticky top-0 bg-[#022c22]/80 backdrop-blur-md z-40">
-            <div class="flex items-center gap-4">
-                <i data-lucide="menu" class="md:hidden w-6 h-6 text-emerald-400"></i>
-                <h2 class="text-sm font-medium text-emerald-300">Command Center / <span class="text-white">Dashboard</span></h2>
-            </div>
-            <div class="flex gap-4">
-                <button class="bg-emerald-900 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-emerald-800 border border-emerald-700">
-                    Upload CSV
-                </button>
-                <button class="btn-lime text-emerald-950 px-5 py-2 rounded-lg text-xs font-bold">
-                    + Manual Trade
-                </button>
-            </div>
+    <main class="flex-1 overflow-y-auto">
+        <header class="h-20 border-b border-white/5 flex items-center justify-between px-10 sticky top-0 bg-[#09090b]/90 backdrop-blur-md z-40">
+            <h2 id="current-view-title" class="text-lg font-medium">Dashboard</h2>
+            <button onclick="document.getElementById('tradeModal').classList.remove('hidden')" class="px-5 py-2.5 bg-white text-black text-xs font-bold rounded-lg hover:bg-zinc-200 transition-all">
+                + ADD TRADE
+            </button>
         </header>
 
-        <div class="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
+        <div id="dashboard" class="page-view active p-10 max-w-7xl mx-auto space-y-8">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="glass-card p-8 rounded-2xl">
+                    <span class="text-zinc-500 text-xs font-bold uppercase tracking-widest">Total P&L</span>
+                    <h3 id="stat-pnl" class="text-4xl font-bold mt-2">$0.00</h3>
+                </div>
+                <div class="glass-card p-8 rounded-2xl">
+                    <span class="text-zinc-500 text-xs font-bold uppercase tracking-widest">Win Rate</span>
+                    <h3 id="stat-winrate" class="text-4xl font-bold mt-2">0%</h3>
+                </div>
+                <div class="glass-card p-8 rounded-2xl">
+                    <span class="text-zinc-500 text-xs font-bold uppercase tracking-widest">Trades Logged</span>
+                    <h3 id="stat-count" class="text-4xl font-bold mt-2">0</h3>
+                </div>
+            </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div class="glass-tile p-6">
-                    <p class="text-emerald-400 text-[10px] uppercase font-bold tracking-widest">Total Net P/L</p>
-                    <h3 class="text-3xl font-bold mt-2 text-white">+$12,450.82</h3>
-                    <div class="mt-4 flex items-center gap-2 text-xs text-lime-400">
-                        <i data-lucide="trending-up" class="w-3 h-3"></i> +14% vs last month
-                    </div>
-                </div>
-                <div class="glass-tile p-6">
-                    <p class="text-emerald-400 text-[10px] uppercase font-bold tracking-widest">Win Rate</p>
-                    <h3 class="text-3xl font-bold mt-2 text-white">68.2%</h3>
-                    <div class="mt-4 w-full bg-emerald-900 h-1.5 rounded-full">
-                        <div class="bg-lime-500 h-full rounded-full" style="width: 68%"></div>
-                    </div>
-                </div>
-                <div class="glass-tile p-6">
-                    <p class="text-emerald-400 text-[10px] uppercase font-bold tracking-widest">Profit Factor</p>
-                    <h3 class="text-3xl font-bold mt-2 text-white">2.27</h3>
-                    <p class="text-[10px] text-emerald-500 mt-4 uppercase">Status: Healthy</p>
-                </div>
-                <div class="glass-tile p-6">
-                    <p class="text-emerald-400 text-[10px] uppercase font-bold tracking-widest">Avg Win vs Loss</p>
-                    <h3 class="text-xl font-bold mt-2 text-white">$420 / <span class="text-red-400">-$185</span></h3>
-                    <p class="text-[10px] text-emerald-500 mt-4 uppercase">Expectancy: $227.30</p>
+            <div class="glass-card rounded-2xl overflow-hidden p-2 text-center">
+                <div class="p-20 text-zinc-600 font-bold uppercase text-xs tracking-tighter">
+                    Data will visualize here once you log your first 3 trades
                 </div>
             </div>
+        </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-2 glass-tile p-8 flex flex-col">
-                    <div class="flex justify-between items-center mb-6">
-                        <h4 class="font-bold text-emerald-100 text-lg">Growth Equity Curve</h4>
-                        <select class="bg-emerald-900 border-none text-xs rounded p-1 text-emerald-200">
-                            <option>Last 30 Days</option>
-                            <option>Last 90 Days</option>
-                        </select>
-                    </div>
-                    <div class="flex-1 h-64 chart-gradient relative rounded-xl border border-emerald-800/50">
-                        <svg class="absolute bottom-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            <path d="M0,80 L10,75 L25,85 L40,40 L60,55 L80,20 L100,10" fill="none" stroke="#84cc16" stroke-width="2" vector-effect="non-scaling-stroke"></path>
-                        </svg>
-                    </div>
-                </div>
-
-                <div class="glass-tile p-8">
-                    <h4 class="font-bold text-emerald-100 text-lg mb-6">Behavioral Tags</h4>
-                    <div class="flex flex-wrap gap-2">
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-800 text-emerald-200 border border-emerald-600">Breakout Setup</span>
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-lime-900/30 text-lime-400 border border-lime-700">Patience Level: High</span>
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-800 text-emerald-200 border border-emerald-600">Reversal Strategy</span>
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-amber-900/30 text-amber-400 border border-amber-700">Felt FOMO</span>
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-red-900/30 text-red-400 border border-red-700">Early Exit</span>
-                    </div>
-                    <button class="w-full mt-10 py-3 rounded-lg border border-dashed border-emerald-700 text-emerald-500 text-xs hover:text-lime-500 hover:border-lime-500 transition-all">
-                        + Manage Tag System
-                    </button>
-                </div>
+        <div id="tradelog" class="page-view p-10 max-w-7xl mx-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-bold">Execution History</h3>
+                <button onclick="localStorage.clear(); location.reload();" class="text-red-500 text-[10px] font-bold uppercase">Reset System</button>
             </div>
-
-            <section class="space-y-4">
-                <div class="flex justify-between items-end">
-                    <div>
-                        <h3 class="text-xl font-bold">Trade Log</h3>
-                        <p class="text-xs text-emerald-500">Post-trade intelligence & execution review</p>
-                    </div>
-                    <div class="flex gap-2">
-                        <input type="text" placeholder="Search Symbol..." class="bg-emerald-950 border border-emerald-800 text-xs px-4 py-2 rounded-lg focus:outline-none focus:border-lime-500">
-                        <button class="bg-emerald-900 p-2 rounded-lg text-emerald-400"><i data-lucide="sliders-horizontal" class="w-4 h-4"></i></button>
-                    </div>
-                </div>
-
-                <div class="glass-tile overflow-hidden">
-                    <table class="w-full text-left text-sm">
-                        <thead class="bg-emerald-900/50 text-emerald-300">
-                            <tr>
-                                <th class="p-4 font-semibold uppercase text-[10px]">Symbol</th>
-                                <th class="p-4 font-semibold uppercase text-[10px]">Side</th>
-                                <th class="p-4 font-semibold uppercase text-[10px]">Entry Price</th>
-                                <th class="p-4 font-semibold uppercase text-[10px]">Exit Price</th>
-                                <th class="p-4 font-semibold uppercase text-[10px]">Strategy Tag</th>
-                                <th class="p-4 font-semibold uppercase text-[10px] text-right">Net P/L</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-emerald-900">
-                            <tr class="hover:bg-emerald-800/20 transition-colors">
-                                <td class="p-4 font-bold">NAS100</td>
-                                <td class="p-4"><span class="text-lime-500 font-bold">LONG</span></td>
-                                <td class="p-4">$18,240.50</td>
-                                <td class="p-4">$18,310.00</td>
-                                <td class="p-4"><span class="bg-emerald-800 px-2 py-1 rounded text-[10px]">High Volatility</span></td>
-                                <td class="p-4 text-right font-bold text-lime-400">+$1,240.00</td>
-                            </tr>
-                            <tr class="hover:bg-emerald-800/20 transition-colors">
-                                <td class="p-4 font-bold">XAUUSD</td>
-                                <td class="p-4"><span class="text-red-400 font-bold">SHORT</span></td>
-                                <td class="p-4">$2,342.10</td>
-                                <td class="p-4">$2,345.50</td>
-                                <td class="p-4"><span class="bg-emerald-800 px-2 py-1 rounded text-[10px]">Mean Reversion</span></td>
-                                <td class="p-4 text-right font-bold text-red-400">-$340.00</td>
-                            </tr>
-                            <tr class="hover:bg-emerald-800/20 transition-colors">
-                                <td class="p-4 font-bold">AAPL</td>
-                                <td class="p-4"><span class="text-lime-500 font-bold">LONG</span></td>
-                                <td class="p-4">$189.20</td>
-                                <td class="p-4">$192.40</td>
-                                <td class="p-4"><span class="bg-emerald-800 px-2 py-1 rounded text-[10px]">Gap Fill</span></td>
-                                <td class="p-4 text-right font-bold text-lime-400">+$620.00</td>
-                            </tr>
+            <div class="glass-card rounded-2xl overflow-hidden">
+                <table class="w-full text-left text-sm">
+                    <thead class="border-b border-white/5 bg-white/5 text-zinc-400">
+                        <tr><th class="p-5">Ticker</th><th class="p-5">Side</th><th class="p-5">Result</th><th class="p-5 text-right">Net P/L</th></tr>
+                    </thead>
+                    <tbody id="log-table-body">
                         </tbody>
-                    </table>
-                </div>
-            </section>
+                </table>
+            </div>
+        </div>
+
+        <div id="analytics" class="page-view p-10 max-w-7xl mx-auto">
+            <h3 class="text-2xl font-bold">Analytics</h3>
+            <div class="glass-card mt-10 p-40 text-center text-zinc-700">Analytics engine pending data...</div>
         </div>
     </main>
 
-    <script>
-        // Initialize Lucide Icons
-        lucide.createIcons();
+    <div id="tradeModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4">
+        <div class="glass-card w-full max-w-md p-10 rounded-3xl border-blue-500/20">
+            <h3 class="text-xl font-bold mb-6 italic">Enter New Trade</h3>
+            <form id="tradeForm" class="space-y-4">
+                <input type="text" id="symbol" placeholder="Ticker (e.g. NAS100)" class="w-full p-4 rounded-xl outline-none" required>
+                <select id="side" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-white outline-none">
+                    <option value="LONG">LONG</option>
+                    <option value="SHORT">SHORT</option>
+                </select>
+                <input type="number" id="pnl" step="any" placeholder="Net Profit/Loss ($)" class="w-full p-4 rounded-xl outline-none" required>
+                <div class="flex gap-4 pt-4">
+                    <button type="button" onclick="document.getElementById('tradeModal').classList.add('hidden')" class="flex-1 text-zinc-500 font-bold uppercase text-xs">Cancel</button>
+                    <button type="submit" class="flex-1 bg-blue-600 text-white py-4 rounded-xl font-bold uppercase text-xs">Save Trade</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-        // Simple Tab Highlighting Logic
-        document.querySelectorAll('nav a').forEach(link => {
-            link.addEventListener('click', function(e) {
-                document.querySelectorAll('nav a').forEach(l => l.classList.remove('nav-active', 'text-lime-500'));
-                document.querySelectorAll('nav a').forEach(l => l.classList.add('text-emerald-100'));
-                this.classList.add('nav-active');
-                this.classList.remove('text-emerald-100');
-            });
-        });
+    <script>
+        // 1. NAVIGATION ENGINE
+        function navigateTo(pageId, element) {
+            // Hide all pages
+            const pages = document.querySelectorAll('.page-view');
+            pages.forEach(p => p.classList.remove('active'));
+            
+            // Show the one we want
+            document.getElementById(pageId).classList.add('active');
+            
+            // Reset nav button styles
+            const navs = document.querySelectorAll('.sidebar-link');
+            navs.forEach(n => n.classList.remove('active-nav'));
+            element.classList.add('active-nav');
+            
+            // Update Title
+            document.getElementById('current-view-title').innerText = pageId.toUpperCase();
+        }
+
+        // 2. DATA ENGINE
+        let tradeData = JSON.parse(localStorage.getItem('gl_storage')) || [];
+
+        function saveTrade(e) {
+            e.preventDefault();
+            const trade = {
+                id: Date.now(),
+                symbol: document.getElementById('symbol').value.toUpperCase(),
+                side: document.getElementById('side').value,
+                pnl: parseFloat(document.getElementById('pnl').value)
+            };
+            
+            tradeData.unshift(trade);
+            localStorage.setItem('gl_storage', JSON.stringify(tradeData));
+            
+            document.getElementById('tradeForm').reset();
+            document.getElementById('tradeModal').classList.add('hidden');
+            refreshUI();
+        }
+
+        function refreshUI() {
+            const total = tradeData.reduce((acc, t) => acc + t.pnl, 0);
+            const winCount = tradeData.filter(t => t.pnl > 0).length;
+            const rate = tradeData.length > 0 ? ((winCount / tradeData.length) * 100).toFixed(1) : 0;
+
+            // Update Dash
+            document.getElementById('stat-pnl').innerText = (total >= 0 ? '+$' : '-$') + Math.abs(total).toFixed(2);
+            document.getElementById('stat-pnl').style.color = total >= 0 ? '#10b981' : '#ef4444';
+            document.getElementById('stat-winrate').innerText = rate + '%';
+            document.getElementById('stat-count').innerText = tradeData.length;
+
+            // Update Table
+            const body = document.getElementById('log-table-body');
+            body.innerHTML = tradeData.map(t => `
+                <tr class="border-b border-white/5">
+                    <td class="p-5 font-bold">${t.symbol}</td>
+                    <td class="p-5 text-xs text-zinc-500">${t.side}</td>
+                    <td class="p-5 ${t.pnl >= 0 ? 'text-emerald-500' : 'text-red-500'} font-bold">${t.pnl >= 0 ? 'WIN' : 'LOSS'}</td>
+                    <td class="p-5 text-right font-mono ${t.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}">${t.pnl >= 0 ? '+' : ''}${t.pnl}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Initialize
+        document.getElementById('tradeForm').addEventListener('submit', saveTrade);
+        lucide.createIcons();
+        refreshUI();
     </script>
 </body>
 </html>
