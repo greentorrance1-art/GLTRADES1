@@ -1,263 +1,476 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GLTRADES | Decision Optimization</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-deep: #022c22;
-            --sidebar-deep: #052e16;
-            --emerald-accent: #10b981;
-            --lime-bright: #84cc16;
-        }
-        body { font-family: 'Inter', sans-serif; background-color: var(--bg-deep); color: #ecfdf5; margin: 0; overflow: hidden; }
-        
-        /* Emerald Sidebar Styling from Screenshot */
-        .sidebar-link { transition: all 0.2s ease; cursor: pointer; color: #a7f3d0; border-radius: 8px; }
-        .sidebar-link:hover { background: rgba(16, 185, 129, 0.1); color: white; }
-        .active-nav { background: rgba(132, 204, 22, 0.15) !important; color: var(--lime-bright) !important; font-weight: 600; }
-
-        /* Card & Glass Effects */
-        .glass-panel { background: rgba(6, 78, 59, 0.4); border: 1px solid rgba(132, 204, 22, 0.1); border-radius: 18px; backdrop-filter: blur(12px); }
-        .btn-emerald { background: var(--lime-bright); color: #022c22; font-weight: 700; transition: all 0.3s; }
-        .btn-emerald:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(132, 204, 22, 0.3); }
-
-        /* Layout & Page Logic */
-        .page-view { display: none; height: calc(100vh - 80px); }
-        .page-view.active { display: block; animation: fadeSlide 0.3s ease-out; }
-        @keyframes fadeSlide { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: var(--sidebar-deep); border-radius: 10px; }
-    </style>
-</head>
-<body class="flex h-screen">
-
-    <aside class="w-64 bg-[#052e16] border-r border-emerald-900/40 flex flex-col z-50">
-        <div class="p-8">
-            <h1 class="text-xl font-black tracking-tighter text-white uppercase italic">GL<span class="text-[#84cc16]">TRADES</span></h1>
-            <p class="text-[10px] text-emerald-500 font-bold tracking-widest uppercase">Decision Optimization</p>
-        </div>
-        
-        <nav class="flex-1 px-4 space-y-2 mt-4">
-            <div onclick="navigateTo('dashboard', this)" class="sidebar-link active-nav flex items-center gap-3 px-4 py-3 text-sm">
-                <i data-lucide="layout-grid" class="w-4 h-4"></i> Dashboard
-            </div>
-            <div onclick="navigateTo('trades', this)" class="sidebar-link flex items-center gap-3 px-4 py-3 text-sm">
-                <i data-lucide="list" class="w-4 h-4"></i> Trades
-            </div>
-            <div onclick="navigateTo('reports', this)" class="sidebar-link flex items-center gap-3 px-4 py-3 text-sm">
-                <i data-lucide="bar-chart-2" class="w-4 h-4"></i> Reports
-            </div>
-            <div onclick="navigateTo('playbooks', this)" class="sidebar-link flex items-center gap-3 px-4 py-3 text-sm">
-                <i data-lucide="book" class="w-4 h-4"></i> Playbooks
-            </div>
-            <div onclick="navigateTo('university', this)" class="sidebar-link flex items-center gap-3 px-4 py-3 text-sm">
-                <i data-lucide="graduation-cap" class="w-4 h-4"></i> GL University
-            </div>
-        </nav>
-    </aside>
-
-    <main class="flex-1 flex flex-col">
-        <header class="h-20 border-b border-emerald-900/30 flex items-center justify-between px-10 bg-[#022c22]/80 backdrop-blur-md sticky top-0 z-40">
-            <div class="text-xs font-bold text-emerald-500 uppercase tracking-widest">
-                Command Center / <span id="nav-indicator" class="text-white">Dashboard</span>
-            </div>
-            <div class="flex items-center gap-4">
-                <button class="px-4 py-2 bg-emerald-900/50 text-emerald-400 text-[10px] font-bold rounded-lg border border-emerald-800">Upload CSV</button>
-                <button onclick="openModal()" class="btn-emerald px-6 py-2.5 rounded-lg text-[11px] uppercase">+ Manual Trade</button>
-            </div>
-        </header>
-
-        <div class="flex-1 overflow-y-auto p-10">
-            <div id="dashboard" class="page-view active space-y-8">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div class="glass-panel p-6">
-                        <span class="text-[10px] font-bold text-emerald-500 uppercase">Total Net P/L</span>
-                        <h3 id="stat-pnl" class="text-2xl font-black mt-1 text-white">+$0.00</h3>
-                        <p class="text-[10px] text-emerald-500/60 mt-2">📊 Tracking live performance</p>
-                    </div>
-                    <div class="glass-panel p-6 border-b-4 border-lime-500/30">
-                        <span class="text-[10px] font-bold text-emerald-500 uppercase">Win Rate</span>
-                        <h3 id="stat-winrate" class="text-2xl font-black mt-1 text-white">0%</h3>
-                        <div class="w-full bg-emerald-950 h-1.5 mt-3 rounded-full overflow-hidden">
-                            <div id="winrate-bar" class="h-full bg-lime-500 w-0"></div>
-                        </div>
-                    </div>
-                    <div class="glass-panel p-6">
-                        <span class="text-[10px] font-bold text-emerald-500 uppercase">Profit Factor</span>
-                        <h3 id="stat-pf" class="text-2xl font-black mt-1 text-white">0.00</h3>
-                        <p class="text-[10px] text-emerald-500 font-bold mt-2 uppercase tracking-tighter">Status: Pending Data</p>
-                    </div>
-                    <div class="glass-panel p-6">
-                        <span class="text-[10px] font-bold text-emerald-500 uppercase text-center">Avg Win vs Loss</span>
-                        <div class="flex justify-between items-center mt-1">
-                            <span id="stat-avgwin" class="text-lg font-black text-lime-400">+$0</span>
-                            <span class="text-zinc-600 text-xl">/</span>
-                            <span id="stat-avgloss" class="text-lg font-black text-red-400">-$0</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-2 glass-panel p-8 min-h-[350px] relative">
-                        <div class="flex justify-between items-center mb-6">
-                            <h4 class="font-bold text-white tracking-tight">Growth Equity Curve</h4>
-                            <select class="bg-emerald-950 text-[10px] font-bold p-2 rounded border border-emerald-800">
-                                <option>Last 30 Days</option>
-                            </select>
-                        </div>
-                        <div class="h-48 w-full mt-4 flex items-end gap-1">
-                            <div class="w-full h-full border-b border-emerald-900 flex items-center justify-center italic text-emerald-800 text-xs">Visualizing after 3 entries...</div>
-                        </div>
-                    </div>
-
-                    <div class="glass-panel p-8">
-                        <h4 class="font-bold text-white mb-6 tracking-tight">Behavioral Tags</h4>
-                        <div class="flex flex-wrap gap-2">
-                            <span class="px-3 py-1 bg-emerald-900/40 text-emerald-400 border border-emerald-800 text-[10px] font-bold rounded-full">Breakout Setup</span>
-                            <span class="px-3 py-1 bg-lime-900/20 text-lime-400 border border-lime-800/30 text-[10px] font-bold rounded-full">Patience Level: High</span>
-                            <span class="px-3 py-1 bg-red-900/20 text-red-400 border border-red-800/30 text-[10px] font-bold rounded-full">Felt FOMO</span>
-                        </div>
-                        <button class="w-full mt-8 border border-dashed border-emerald-800 p-4 rounded-xl text-[10px] font-bold text-emerald-600 uppercase">+ Manage Tag System</button>
-                    </div>
-                </div>
-
-                <div class="glass-panel overflow-hidden">
-                    <div class="p-6 border-b border-emerald-900/30 flex justify-between items-center">
-                        <h4 class="font-bold text-white tracking-tight">Trade Log</h4>
-                        <div class="flex gap-2">
-                            <input type="text" placeholder="Search Symbol..." class="bg-emerald-950 border border-emerald-900 px-4 py-2 rounded-lg text-xs outline-none focus:border-lime-500">
-                        </div>
-                    </div>
-                    <table class="w-full text-left text-xs">
-                        <thead class="bg-emerald-950/50 text-emerald-500 font-bold uppercase tracking-tighter">
-                            <tr>
-                                <th class="p-5">Symbol</th>
-                                <th class="p-5 text-center">Side</th>
-                                <th class="p-5">Entry Price</th>
-                                <th class="p-5">Exit Price</th>
-                                <th class="p-5 text-right">Net P/L</th>
-                            </tr>
-                        </thead>
-                        <tbody id="dash-trade-body" class="divide-y divide-emerald-900/20">
-                            </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div id="trades" class="page-view space-y-6">
-                <h2 class="text-3xl font-black italic">EXECUTION ARCHIVE</h2>
-                <div id="full-log-container" class="space-y-4"></div>
-            </div>
-
-            <div id="reports" class="page-view text-center pt-20">
-                <i data-lucide="bar-chart-2" class="w-20 h-20 text-emerald-900 mx-auto mb-4"></i>
-                <h3 class="text-emerald-700 font-black italic text-4xl">ANALYTICS ENGINE</h3>
-            </div>
-            <div id="playbooks" class="page-view text-center pt-20">
-                <h3 class="text-emerald-700 font-black italic text-4xl">STRATEGY REPOSITORY</h3>
-            </div>
-            <div id="university" class="page-view text-center pt-20">
-                <h3 class="text-emerald-700 font-black italic text-4xl">GL UNIVERSITY</h3>
+<!-- Main Content -->
+<main class="main-content">
+    <!-- Dashboard Page -->
+    <div id="dashboard-page" class="page active">
+        <div class="page-header">
+            <h2>Dashboard</h2>
+            <div class="header-actions">
+                <button class="btn btn-primary" id="add-trade-btn">+ Add Trade</button>
             </div>
         </div>
-    </main>
 
-    <div id="tradeModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-6 bg-[#022c22]/90 backdrop-blur-md">
-        <div class="glass-panel w-full max-w-md p-8 border-lime-500/30">
-            <h3 class="text-2xl font-black italic mb-6 text-white uppercase tracking-tighter">Log Execution</h3>
-            <form id="tradeForm" class="space-y-4">
-                <div class="grid grid-cols-2 gap-4">
-                    <input type="text" id="symbol" placeholder="Symbol (e.g. NAS100)" class="w-full bg-emerald-950 border border-emerald-900 p-4 rounded-xl text-white outline-none focus:border-lime-500" required>
-                    <select id="side" class="w-full bg-emerald-950 border border-emerald-900 p-4 rounded-xl text-white outline-none">
-                        <option value="LONG">LONG</option>
-                        <option value="SHORT">SHORT</option>
-                    </select>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <input type="number" id="entry" step="any" placeholder="Entry Price" class="w-full bg-emerald-950 border border-emerald-900 p-4 rounded-xl text-white outline-none focus:border-lime-500" required>
-                    <input type="number" id="exit" step="any" placeholder="Exit Price" class="w-full bg-emerald-950 border border-emerald-900 p-4 rounded-xl text-white outline-none focus:border-lime-500" required>
-                </div>
-                <input type="number" id="pnl" step="any" placeholder="Net P&L ($)" class="w-full bg-emerald-950 border border-emerald-900 p-4 rounded-xl text-white outline-none focus:border-lime-500 font-black text-lg" required>
-                
-                <div class="flex gap-3 pt-4">
-                    <button type="button" onclick="closeModal()" class="flex-1 text-emerald-500 font-bold uppercase text-[10px]">Cancel</button>
-                    <button type="submit" class="flex-[2] btn-emerald py-4 rounded-xl uppercase text-xs">Finalize Trade</button>
-                </div>
-            </form>
+        <!-- Metrics Grid -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Net P/L</div>
+                <div class="metric-value" id="metric-net-pl">$0.00</div>
+                <div class="metric-change" id="metric-net-pl-change"></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Win Rate</div>
+                <div class="metric-value" id="metric-win-rate">0%</div>
+                <div class="metric-change" id="metric-win-rate-change"></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Expectancy</div>
+                <div class="metric-value" id="metric-expectancy">$0.00</div>
+                <div class="metric-change" id="metric-expectancy-change"></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Profit Factor</div>
+                <div class="metric-value" id="metric-profit-factor">0.00</div>
+                <div class="metric-change" id="metric-profit-factor-change"></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Max Drawdown</div>
+                <div class="metric-value" id="metric-max-drawdown">$0.00</div>
+                <div class="metric-change" id="metric-max-drawdown-change"></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Avg Win/Loss</div>
+                <div class="metric-value" id="metric-avg-win-loss">0.00</div>
+                <div class="metric-change" id="metric-avg-win-loss-change"></div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="charts-row">
+            <div class="chart-container">
+                <h3>Equity Curve</h3>
+                <canvas id="equity-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>Win/Loss Distribution</h3>
+                <canvas id="winloss-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Trades -->
+        <div class="section">
+            <h3>Recent Trades</h3>
+            <div class="table-container">
+                <table class="data-table" id="recent-trades-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Quantity</th>
+                            <th>Entry</th>
+                            <th>Exit</th>
+                            <th>P/L</th>
+                            <th>Strategy</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
-    <script>
-        lucide.createIcons();
+    <!-- Trades Page -->
+    <div id="trades-page" class="page">
+        <div class="page-header">
+            <h2>All Trades</h2>
+            <div class="header-actions">
+                <input type="text" id="trade-search" placeholder="Search trades..." class="search-input">
+                <select id="trade-filter" class="filter-select">
+                    <option value="all">All Trades</option>
+                    <option value="winning">Winning</option>
+                    <option value="losing">Losing</option>
+                    <option value="breakeven">Breakeven</option>
+                </select>
+                <button class="btn btn-primary" id="add-trade-btn-2">+ Add Trade</button>
+            </div>
+        </div>
 
-        // 💾 CORE STORAGE ENGINE
-        let trades = JSON.parse(localStorage.getItem('gl_emerald_db')) || [];
+        <div class="table-container">
+            <table class="data-table" id="all-trades-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Quantity</th>
+                        <th>Entry Price</th>
+                        <th>Exit Price</th>
+                        <th>P/L</th>
+                        <th>R-Multiple</th>
+                        <th>Strategy</th>
+                        <th>Tags</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
 
-        // 🧭 NAVIGATION ENGINE
-        function navigateTo(pageId, btn) {
-            document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.sidebar-link').forEach(b => b.classList.remove('active-nav'));
-            
-            document.getElementById(pageId).classList.add('active');
-            btn.classList.add('active-nav');
-            document.getElementById('nav-indicator').innerText = pageId.charAt(0).toUpperCase() + pageId.slice(1);
-            
-            if(pageId === 'dashboard') updateDashboard();
-        }
+    <!-- Reports Page -->
+    <div id="reports-page" class="page">
+        <div class="page-header">
+            <h2>Reports & Analytics</h2>
+            <div class="header-actions">
+                <select id="report-type" class="filter-select">
+                    <option value="drawdown">Drawdown Analysis</option>
+                    <option value="risk_reward">Risk/Reward Analysis</option>
+                    <option value="tag_performance">Tag Performance</option>
+                    <option value="performance_time">Performance Over Time</option>
+                    <option value="day_of_week">Day of Week Analysis</option>
+                    <option value="strategy_comparison">Strategy Comparison</option>
+                    <option value="time_of_day">Time of Day Analysis</option>
+                </select>
+                <button class="btn btn-secondary" id="export-report-btn">Export Report</button>
+            </div>
+        </div>
 
-        // ➕ TRADE LOGIC
-        function openModal() { document.getElementById('tradeModal').classList.remove('hidden'); }
-        function closeModal() { document.getElementById('tradeModal').classList.add('hidden'); }
+        <div class="report-container">
+            <div class="chart-container large">
+                <canvas id="report-chart"></canvas>
+            </div>
+            <div class="report-stats" id="report-stats"></div>
+        </div>
+    </div>
 
-        document.getElementById('tradeForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const t = {
-                id: Date.now(),
-                symbol: document.getElementById('symbol').value.toUpperCase(),
-                side: document.getElementById('side').value,
-                entry: document.getElementById('entry').value,
-                exit: document.getElementById('exit').value,
-                pnl: parseFloat(document.getElementById('pnl').value)
-            };
-            trades.unshift(t);
-            localStorage.setItem('gl_emerald_db', JSON.stringify(trades));
-            e.target.reset();
-            closeModal();
-            updateDashboard();
-        });
+    <!-- Playbooks Page -->
+    <div id="playbooks-page" class="page">
+        <div class="page-header">
+            <h2>Trading Playbooks</h2>
+            <div class="header-actions">
+                <button class="btn btn-primary" id="add-playbook-btn">+ New Playbook</button>
+            </div>
+        </div>
 
-        function updateDashboard() {
-            const totalPnl = trades.reduce((a, b) => a + b.pnl, 0);
-            const wins = trades.filter(t => t.pnl > 0).length;
-            const winRate = trades.length > 0 ? ((wins / trades.length) * 100).toFixed(1) : 0;
-            
-            // Header Stats
-            document.getElementById('stat-pnl').innerText = (totalPnl >= 0 ? '+$' : '-$') + Math.abs(totalPnl).toLocaleString();
-            document.getElementById('stat-pnl').className = `text-2xl font-black mt-1 ${totalPnl >= 0 ? 'text-lime-400' : 'text-red-400'}`;
-            document.getElementById('stat-winrate').innerText = winRate + '%';
-            document.getElementById('winrate-bar').style.width = winRate + '%';
+        <div class="playbooks-grid" id="playbooks-grid"></div>
+    </div>
 
-            // Table Rendering
-            const body = document.getElementById('dash-trade-body');
-            body.innerHTML = trades.slice(0, 5).map(t => `
-                <tr class="hover:bg-emerald-400/5">
-                    <td class="p-5 font-bold text-white tracking-tighter uppercase">${t.symbol}</td>
-                    <td class="p-5 text-center"><span class="px-2 py-0.5 rounded text-[9px] font-black ${t.side === 'LONG' ? 'bg-lime-500/10 text-lime-500' : 'bg-red-500/10 text-red-500'}">${t.side}</span></td>
-                    <td class="p-5 text-emerald-500 font-mono">$${t.entry}</td>
-                    <td class="p-5 text-emerald-500 font-mono">$${t.exit}</td>
-                    <td class="p-5 text-right font-black ${t.pnl >= 0 ? 'text-lime-400' : 'text-red-500'}">${t.pnl >= 0 ? '+$' : '-$'}${Math.abs(t.pnl).toLocaleString()}</td>
-                </tr>
-            `).join('');
-        }
+    <!-- Journal Page -->
+    <div id="journal-page" class="page">
+        <div class="page-header">
+            <h2>Trading Journal</h2>
+            <div class="header-actions">
+                <button class="btn btn-primary" id="add-journal-btn">+ New Entry</button>
+            </div>
+        </div>
 
-        // Initialize on load
-        window.onload = updateDashboard;
-    </script>
-</body>
-</html>
+        <div class="journal-entries" id="journal-entries"></div>
+    </div>
+
+    <!-- GL University Page -->
+    <div id="university-page" class="page">
+        <div class="page-header">
+            <h2>GL University</h2>
+            <p class="page-subtitle">Educational Resources for Trading Excellence</p>
+        </div>
+
+        <div class="university-grid">
+            <div class="course-card">
+                <div class="course-icon">📊</div>
+                <h3>Risk Management Fundamentals</h3>
+                <p>Learn the essential principles of position sizing, stop losses, and portfolio risk management.</p>
+                <div class="course-meta">
+                    <span>8 Lessons</span>
+                    <span>Beginner</span>
+                </div>
+                <button class="btn btn-outline">Start Learning</button>
+            </div>
+
+            <div class="course-card">
+                <div class="course-icon">📈</div>
+                <h3>Technical Analysis Mastery</h3>
+                <p>Master chart patterns, indicators, and price action trading strategies.</p>
+                <div class="course-meta">
+                    <span>12 Lessons</span>
+                    <span>Intermediate</span>
+                </div>
+                <button class="btn btn-outline">Start Learning</button>
+            </div>
+
+            <div class="course-card">
+                <div class="course-icon">🧠</div>
+                <h3>Trading Psychology</h3>
+                <p>Develop mental discipline, emotional control, and winning trading habits.</p>
+                <div class="course-meta">
+                    <span>10 Lessons</span>
+                    <span>All Levels</span>
+                </div>
+                <button class="btn btn-outline">Start Learning</button>
+            </div>
+
+            <div class="course-card">
+                <div class="course-icon">💰</div>
+                <h3>Options Trading Strategies</h3>
+                <p>Understand options mechanics, spreads, and advanced trading strategies.</p>
+                <div class="course-meta">
+                    <span>15 Lessons</span>
+                    <span>Advanced</span>
+                </div>
+                <button class="btn btn-outline">Start Learning</button>
+            </div>
+
+            <div class="course-card">
+                <div class="course-icon">🎯</div>
+                <h3>Building Trading Systems</h3>
+                <p>Create, backtest, and optimize profitable trading systems and strategies.</p>
+                <div class="course-meta">
+                    <span>10 Lessons</span>
+                    <span>Advanced</span>
+                </div>
+                <button class="btn btn-outline">Start Learning</button>
+            </div>
+
+            <div class="course-card">
+                <div class="course-icon">📉</div>
+                <h3>Market Analysis & Research</h3>
+                <p>Develop skills in fundamental analysis, market research, and trade idea generation.</p>
+                <div class="course-meta">
+                    <span>9 Lessons</span>
+                    <span>Intermediate</span>
+                </div>
+                <button class="btn btn-outline">Start Learning</button>
+            </div>
+        </div>
+
+        <div class="section" style="margin-top: 3rem;">
+            <h3>Trading Resources</h3>
+            <div class="resources-grid">
+                <div class="resource-item">
+                    <h4>📚 Reading List</h4>
+                    <ul>
+                        <li>Trading in the Zone - Mark Douglas</li>
+                        <li>Market Wizards - Jack Schwager</li>
+                        <li>Reminiscences of a Stock Operator - Edwin Lefèvre</li>
+                        <li>The Disciplined Trader - Mark Douglas</li>
+                    </ul>
+                </div>
+                <div class="resource-item">
+                    <h4>🔗 Useful Links</h4>
+                    <ul>
+                        <li><a href="#">TradingView - Charting Platform</a></li>
+                        <li><a href="#">Finviz - Market Screener</a></li>
+                        <li><a href="#">Investopedia - Education</a></li>
+                        <li><a href="#">SEC EDGAR - Filings</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Page -->
+    <div id="settings-page" class="page">
+        <div class="page-header">
+            <h2>Settings</h2>
+        </div>
+
+        <div class="settings-container">
+            <div class="settings-section">
+                <h3>General Settings</h3>
+                <div class="setting-item">
+                    <label>Platform Name</label>
+                    <input type="text" id="setting-platform-name" value="GLTRADES" class="setting-input">
+                </div>
+                <div class="setting-item">
+                    <label>Default Currency</label>
+                    <select id="setting-currency" class="setting-input">
+                        <option value="USD" selected>USD</option>
+                        <option value="EUR">EUR</option>
+                        <option value="GBP">GBP</option>
+                        <option value="JPY">JPY</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>Primary Brand Color</label>
+                    <input type="color" id="setting-brand-color" value="#10b981" class="setting-input">
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Features</h3>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="setting-educational" checked>
+                        Enable Educational Content (GL University)
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="setting-sample-data" checked>
+                        Include Sample Data
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Data Management</h3>
+                <div class="setting-item">
+                    <button class="btn btn-secondary" id="export-data-btn">Export All Data</button>
+                    <button class="btn btn-secondary" id="import-data-btn">Import Data</button>
+                    <button class="btn btn-danger" id="reset-data-btn">Reset All Data</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <button class="btn btn-primary" id="save-settings-btn">Save Settings</button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- Add Trade Modal -->
+<div id="trade-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modal-title">Add Trade</h3>
+            <button class="modal-close" id="close-modal">&times;</button>
+        </div>
+        <form id="trade-form">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="trade-date" required>
+                </div>
+                <div class="form-group">
+                    <label>Symbol</label>
+                    <input type="text" id="trade-symbol" placeholder="AAPL" required>
+                </div>
+                <div class="form-group">
+                    <label>Side</label>
+                    <select id="trade-side" required>
+                        <option value="long">Long</option>
+                        <option value="short">Short</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input type="number" id="trade-quantity" placeholder="100" required>
+                </div>
+                <div class="form-group">
+                    <label>Entry Price (USD)</label>
+                    <input type="number" step="0.01" id="trade-entry" placeholder="150.00" required>
+                </div>
+                <div class="form-group">
+                    <label>Exit Price (USD)</label>
+                    <input type="number" step="0.01" id="trade-exit" placeholder="155.00" required>
+                </div>
+                <div class="form-group">
+                    <label>Stop Loss (USD)</label>
+                    <input type="number" step="0.01" id="trade-stop" placeholder="148.00">
+                </div>
+                <div class="form-group">
+                    <label>Strategy</label>
+                    <input type="text" id="trade-strategy" placeholder="Momentum">
+                </div>
+                <div class="form-group full-width">
+                    <label>Tags (comma separated)</label>
+                    <input type="text" id="trade-tags" placeholder="earnings, breakout">
+                </div>
+                <div class="form-group full-width">
+                    <label>Notes</label>
+                    <textarea id="trade-notes" rows="3" placeholder="Trade notes..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancel-trade-btn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Trade</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add Playbook Modal -->
+<div id="playbook-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>New Playbook</h3>
+            <button class="modal-close" id="close-playbook-modal">&times;</button>
+        </div>
+        <form id="playbook-form">
+            <div class="form-group">
+                <label>Playbook Name</label>
+                <input type="text" id="playbook-name" placeholder="Momentum Breakout" required>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="playbook-description" rows="3" placeholder="Strategy description..." required></textarea>
+            </div>
+            <div class="form-group">
+                <label>Entry Criteria</label>
+                <textarea id="playbook-entry" rows="3" placeholder="Entry conditions..." required></textarea>
+            </div>
+            <div class="form-group">
+                <label>Exit Criteria</label>
+                <textarea id="playbook-exit" rows="3" placeholder="Exit conditions..." required></textarea>
+            </div>
+            <div class="form-group">
+                <label>Risk Management</label>
+                <textarea id="playbook-risk" rows="3" placeholder="Risk rules..." required></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancel-playbook-btn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Playbook</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add Journal Modal -->
+<div id="journal-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>New Journal Entry</h3>
+            <button class="modal-close" id="close-journal-modal">&times;</button>
+        </div>
+        <form id="journal-form">
+            <div class="form-group">
+                <label>Date</label>
+                <input type="date" id="journal-date" required>
+            </div>
+            <div class="form-group">
+                <label>Title</label>
+                <input type="text" id="journal-title" placeholder="Trading session recap" required>
+            </div>
+            <div class="form-group">
+                <label>Entry</label>
+                <textarea id="journal-entry" rows="10" placeholder="What did you learn today?" required></textarea>
+            </div>
+            <div class="form-group">
+                <label>Mood</label>
+                <select id="journal-mood">
+                    <option value="excellent">Excellent</option>
+                    <option value="good">Good</option>
+                    <option value="neutral" selected>Neutral</option>
+                    <option value="poor">Poor</option>
+                    <option value="frustrated">Frustrated</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancel-journal-btn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Entry</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+<!-- Firebase Config -->
+<script src="firebase-config.js"></script>
+
+<!-- Authentication -->
+<script src="js/auth.js"></script>
+
+<!-- Main App (loaded after auth check) -->
+<script src="js/app.js"></script>
