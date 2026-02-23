@@ -66,6 +66,7 @@ function showPage(page) {
   if (page === 'playbooks') displayPlaybooks();
   if (page === 'journal') displayJournal();
   if (page === 'university') displayGLUniversity();
+  if (page === 'settings' && authManager.isAdmin()) refreshSettingsGLEditor();
 }
 
 // ─── Trade Modal ──────────────────────────────────────────────────────────────
@@ -706,27 +707,49 @@ function displayJournal() {
   `).join('');
 }
 
-// ─── GL University ────────────────────────────────────────────────────────────
-// Default categories (rendered in HTML, editable by admin via Firestore)
+// ─── GL University ─────────────────────────────────────────────────────────────
+// ── These are the hardcoded defaults shown until admin saves custom content ──
 const DEFAULT_COURSES = [
-  { id: 'risk_management', icon: '📊', title: 'Risk Management Fundamentals', description: 'Learn the essential principles of position sizing, stop losses, and portfolio risk management.', lessons: '8 Lessons', level: 'Beginner' },
-  { id: 'technical_analysis', icon: '📈', title: 'Technical Analysis Mastery', description: 'Master chart patterns, indicators, and price action trading strategies.', lessons: '12 Lessons', level: 'Intermediate' },
-  { id: 'psychology', icon: '🧠', title: 'Trading Psychology', description: 'Develop mental discipline, emotional control, and winning trading habits.', lessons: '10 Lessons', level: 'All Levels' },
-  { id: 'options', icon: '💰', title: 'Options Trading Strategies', description: 'Understand options mechanics, spreads, and advanced trading strategies.', lessons: '15 Lessons', level: 'Advanced' },
-  { id: 'systems', icon: '🎯', title: 'Building Trading Systems', description: 'Create, backtest, and optimize profitable trading systems and strategies.', lessons: '10 Lessons', level: 'Advanced' },
-  { id: 'market_analysis', icon: '📉', title: 'Market Analysis & Research', description: 'Develop skills in fundamental analysis, market research, and trade idea generation.', lessons: '9 Lessons', level: 'Intermediate' }
+  { icon: '📊', title: 'Risk Management Fundamentals',  description: 'Learn the essential principles of position sizing, stop losses, and portfolio risk management.', lessons: '8 Lessons',  level: 'Beginner'     },
+  { icon: '📈', title: 'Technical Analysis Mastery',    description: 'Master chart patterns, indicators, and price action trading strategies.',                          lessons: '12 Lessons', level: 'Intermediate' },
+  { icon: '🧠', title: 'Trading Psychology',            description: 'Develop mental discipline, emotional control, and winning trading habits.',                         lessons: '10 Lessons', level: 'All Levels'   },
+  { icon: '💰', title: 'Options Trading Strategies',    description: 'Understand options mechanics, spreads, and advanced trading strategies.',                           lessons: '15 Lessons', level: 'Advanced'     },
+  { icon: '🎯', title: 'Building Trading Systems',      description: 'Create, backtest, and optimize profitable trading systems and strategies.',                         lessons: '10 Lessons', level: 'Advanced'     },
+  { icon: '📉', title: 'Market Analysis & Research',   description: 'Develop skills in fundamental analysis, market research, and trade idea generation.',               lessons: '9 Lessons',  level: 'Intermediate' }
 ];
 
+const DEFAULT_READING = [
+  { title: 'Trading in the Zone',                      author: 'Mark Douglas'   },
+  { title: 'Market Wizards',                           author: 'Jack Schwager'  },
+  { title: 'Reminiscences of a Stock Operator',        author: 'Edwin Lefèvre'  },
+  { title: 'The Disciplined Trader',                   author: 'Mark Douglas'   }
+];
+
+const DEFAULT_LINKS = [
+  { title: 'TradingView — Charting Platform', url: 'https://www.tradingview.com' },
+  { title: 'Finviz — Market Screener',        url: 'https://finviz.com'          },
+  { title: 'Investopedia — Education',        url: 'https://www.investopedia.com'},
+  { title: 'SEC EDGAR — Filings',             url: 'https://www.sec.gov/edgar'   }
+];
+
+// Live working copy — populated from Firestore or defaults
 let glData = { courses: [], readingList: [], externalLinks: [] };
 
+// Returns true when glData has no custom data saved yet (Firestore doc empty / absent)
+function glIsUsingDefaults() {
+  return glData.courses.length === 0 && glData.readingList.length === 0 && glData.externalLinks.length === 0;
+}
+
+// ── Load from Firestore ────────────────────────────────────────────────────────
 async function loadGLUniversityData() {
   try {
     const doc = await db.collection('global').doc('gl_university').get();
     if (doc.exists) {
       const d = doc.data();
-      glData.courses = d.courses || [];
-      glData.readingList = d.readingList || [];
-      glData.externalLinks = d.externalLinks || [];
+      // Only pull in arrays that the admin has explicitly saved
+      glData.courses      = Array.isArray(d.courses)       ? d.courses      : [];
+      glData.readingList  = Array.isArray(d.readingList)   ? d.readingList  : [];
+      glData.externalLinks= Array.isArray(d.externalLinks) ? d.externalLinks: [];
     } else {
       glData = { courses: [], readingList: [], externalLinks: [] };
     }
@@ -736,106 +759,116 @@ async function loadGLUniversityData() {
   }
 }
 
+// ── Render GL University page ─────────────────────────────────────────────────
 async function displayGLUniversity() {
   await loadGLUniversityData();
+
+  // Re-read role each time in case it loaded async after app init
   const isAdmin = authManager.isAdmin();
 
-  // Course grid
+  // ── Course grid ─────────────────────────────────────────────────────────────
   const grid = document.getElementById('university-grid');
   if (grid) {
     const coursesToShow = glData.courses.length ? glData.courses : DEFAULT_COURSES;
     grid.innerHTML = coursesToShow.map((c, idx) => `
       <div class="course-card">
-        <div class="course-icon">${c.icon || '📚'}</div>
-        <h3>${c.title || ''}</h3>
-        <p>${c.description || ''}</p>
+        <div class="course-icon">${escHtml(c.icon || '📚')}</div>
+        <h3>${escHtml(c.title || '')}</h3>
+        <p>${escHtml(c.description || '')}</p>
         <div class="course-meta">
-          <span>${c.lessons || ''}</span>
-          <span>${c.level || ''}</span>
+          <span>${escHtml(c.lessons || '')}</span>
+          <span>${escHtml(c.level || '')}</span>
         </div>
         <button class="btn btn-outline">Start Learning</button>
         ${isAdmin ? `
           <div class="admin-course-actions">
             <button class="btn btn-secondary action-btn" onclick="openEditCourseModal(${idx})">Edit</button>
-            <button class="btn btn-danger action-btn" onclick="deleteCourse(${idx})">Delete</button>
-          </div>
-        ` : ''}
+            <button class="btn btn-danger action-btn"    onclick="deleteCourse(${idx})">Delete</button>
+          </div>` : ''}
       </div>
     `).join('');
   }
 
-  // Reading list
-  const readingList = document.getElementById('reading-list');
-  if (readingList) {
-    if (glData.readingList.length) {
-      readingList.innerHTML = glData.readingList.map((item, idx) => `
-        <li>
-          <span>${item.title}${item.author ? ' — ' + item.author : ''}</span>
-          ${isAdmin ? `<button class="admin-inline-btn" onclick="deleteReadingItem(${idx})">✕</button>` : ''}
-        </li>
-      `).join('');
-    } else {
-      readingList.innerHTML = `
-        <li>Trading in the Zone — Mark Douglas</li>
-        <li>Market Wizards — Jack Schwager</li>
-        <li>Reminiscences of a Stock Operator — Edwin Lefèvre</li>
-        <li>The Disciplined Trader — Mark Douglas</li>
-      `;
-    }
+  // ── Reading list ────────────────────────────────────────────────────────────
+  const readingEl = document.getElementById('reading-list');
+  if (readingEl) {
+    const list = glData.readingList.length ? glData.readingList : DEFAULT_READING;
+    const usingDefaults = !glData.readingList.length;
+    readingEl.innerHTML = list.map((item, idx) => `
+      <li class="gl-resource-row">
+        <span>${escHtml(item.title)}${item.author ? ' — ' + escHtml(item.author) : ''}</span>
+        ${isAdmin && !usingDefaults ? `
+          <span class="admin-row-btns">
+            <button class="admin-inline-btn edit-btn" onclick="openEditReadingModal(${idx})">Edit</button>
+            <button class="admin-inline-btn"          onclick="deleteReadingItem(${idx})">✕</button>
+          </span>` : ''}
+      </li>
+    `).join('');
   }
 
-  // External links
-  const extLinks = document.getElementById('external-links');
-  if (extLinks) {
-    if (glData.externalLinks.length) {
-      extLinks.innerHTML = glData.externalLinks.map((item, idx) => `
-        <li>
-          <a href="${item.url}" target="_blank" rel="noopener">${item.title}</a>
-          ${isAdmin ? `<button class="admin-inline-btn" onclick="deleteLinkItem(${idx})">✕</button>` : ''}
-        </li>
-      `).join('');
-    } else {
-      extLinks.innerHTML = `
-        <li><a href="https://www.tradingview.com" target="_blank">TradingView — Charting Platform</a></li>
-        <li><a href="https://finviz.com" target="_blank">Finviz — Market Screener</a></li>
-        <li><a href="https://www.investopedia.com" target="_blank">Investopedia — Education</a></li>
-        <li><a href="https://www.sec.gov/edgar" target="_blank">SEC EDGAR — Filings</a></li>
-      `;
-    }
+  // ── External links ──────────────────────────────────────────────────────────
+  const linksEl = document.getElementById('external-links');
+  if (linksEl) {
+    const list = glData.externalLinks.length ? glData.externalLinks : DEFAULT_LINKS;
+    const usingDefaults = !glData.externalLinks.length;
+    linksEl.innerHTML = list.map((item, idx) => `
+      <li class="gl-resource-row">
+        <a href="${escAttr(item.url)}" target="_blank" rel="noopener">${escHtml(item.title)}</a>
+        ${isAdmin && !usingDefaults ? `
+          <span class="admin-row-btns">
+            <button class="admin-inline-btn edit-btn" onclick="openEditLinkModal(${idx})">Edit</button>
+            <button class="admin-inline-btn"          onclick="deleteLinkItem(${idx})">✕</button>
+          </span>` : ''}
+      </li>
+    `).join('');
   }
 
-  // Admin controls panel
+  // ── Admin controls panel visibility ─────────────────────────────────────────
+  // The panel is built once by setupRoleBasedUI; here we just show/hide it
   const adminPanel = document.getElementById('admin-university-panel');
-  if (adminPanel) adminPanel.style.display = isAdmin ? 'block' : 'none';
+  if (adminPanel) {
+    adminPanel.style.display = isAdmin ? 'block' : 'none';
+  }
 }
 
-// ─── Admin UI Setup ───────────────────────────────────────────────────────────
+// ─── Admin Panel ──────────────────────────────────────────────────────────────
+// setupRoleBasedUI is called from initializeApp AFTER userRole is loaded.
+// It injects the admin panel into the university page DOM and marks it visible.
 function setupRoleBasedUI() {
-  buildAdminPanel();
+  buildAdminPanel(); // always inject DOM node (hidden by default)
+
+  // Now that role is guaranteed loaded, show if admin
   if (authManager.isAdmin()) {
-    document.getElementById('admin-university-panel').style.display = 'block';
+    const panel = document.getElementById('admin-university-panel');
+    if (panel) panel.style.display = 'block';
+
+    // Also inject a "Manage GL University" shortcut into the Settings page
+    injectSettingsGLShortcut();
   }
 }
 
 function buildAdminPanel() {
-  // Insert admin panel into university page if not already there
   const universityPage = document.getElementById('university-page');
   if (!universityPage || document.getElementById('admin-university-panel')) return;
 
   const panel = document.createElement('div');
   panel.id = 'admin-university-panel';
-  panel.style.display = 'none';
+  panel.style.display = 'none'; // hidden until role confirmed
   panel.innerHTML = `
-    <div class="settings-section admin-panel-box">
+    <div class="settings-section admin-panel-box" style="margin-bottom:2rem;">
       <h3 style="color:var(--primary-color);margin-bottom:1.5rem;">Admin — GL University Controls</h3>
       <div style="display:flex;gap:1rem;flex-wrap:wrap;">
-        <button class="btn btn-primary" onclick="openAddCourseModal()">+ Add Course</button>
+        <button class="btn btn-primary"   onclick="openAddCourseModal()">+ Add Course</button>
         <button class="btn btn-secondary" onclick="openAddReadingModal()">+ Add Reading</button>
         <button class="btn btn-secondary" onclick="openAddLinkModal()">+ Add Link</button>
       </div>
+      <p style="margin-top:1rem;font-size:0.85rem;color:var(--text-secondary);">
+        Edit and Delete buttons appear on each item below when custom content has been saved.
+        Adding a new item for the first time will copy the defaults into Firestore automatically.
+      </p>
     </div>
   `;
-  // Insert at the top of the university page, after the page-header
+
   const pageHeader = universityPage.querySelector('.page-header');
   if (pageHeader) {
     pageHeader.insertAdjacentElement('afterend', panel);
@@ -844,132 +877,390 @@ function buildAdminPanel() {
   }
 }
 
-// ─── Admin: Course CRUD ───────────────────────────────────────────────────────
-function openAddCourseModal() {
-  const icons = ['📊','📈','🧠','💰','🎯','📉','📚','🔗','⚡','🎓'];
-  const html = `
-    <div id="course-modal" class="modal active">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Add Course</h3>
-          <button class="modal-close" onclick="document.getElementById('course-modal').remove()">&times;</button>
-        </div>
-        <form id="course-form" style="padding:1.5rem;">
-          <div class="form-group">
-            <label>Icon</label>
-            <select id="course-icon-input" class="setting-input">
-              ${icons.map(i => `<option value="${i}">${i}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-group" style="margin-top:1rem;">
-            <label>Title</label>
-            <input type="text" id="course-title-input" class="setting-input" required placeholder="Course title">
-          </div>
-          <div class="form-group" style="margin-top:1rem;">
-            <label>Description</label>
-            <textarea id="course-desc-input" class="setting-input" rows="3" required placeholder="Short description"></textarea>
-          </div>
-          <div class="form-group" style="margin-top:1rem;">
-            <label>Lessons (e.g. "8 Lessons")</label>
-            <input type="text" id="course-lessons-input" class="setting-input" placeholder="8 Lessons">
-          </div>
-          <div class="form-group" style="margin-top:1rem;">
-            <label>Level</label>
-            <select id="course-level-input" class="setting-input">
-              <option>Beginner</option>
-              <option>Intermediate</option>
-              <option>Advanced</option>
-              <option>All Levels</option>
-            </select>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('course-modal').remove()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Course</button>
-          </div>
-        </form>
+// Inject the full GL University admin editor directly into the Settings page
+function injectSettingsGLShortcut() {
+  if (document.getElementById('settings-gl-shortcut')) return;
+  const settingsContainer = document.querySelector('#settings-page .settings-container');
+  if (!settingsContainer) return;
+
+  const section = document.createElement('div');
+  section.id = 'settings-gl-shortcut';
+  section.className = 'settings-section admin-panel-box';
+  section.innerHTML = `
+    <h3 style="color:var(--primary-color);margin-bottom:0.5rem;">GL University — Admin Editor</h3>
+    <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1.5rem;">
+      Edit course categories, lesson counts, reading list, and useful links. Changes save directly to Firestore.
+    </p>
+
+    <!-- Course category editor -->
+    <div id="settings-gl-courses-section">
+      <h4 style="margin-bottom:0.75rem;">Course Categories</h4>
+      <div id="settings-gl-courses-list" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;">
+        <span style="color:var(--text-secondary);font-size:0.85rem;">Loading…</span>
       </div>
+      <button class="btn btn-primary" style="margin-bottom:2rem;" onclick="settingsGLAddCourse()">+ Add Course</button>
+    </div>
+
+    <!-- Reading list editor -->
+    <div id="settings-gl-reading-section">
+      <h4 style="margin-bottom:0.75rem;">Reading List</h4>
+      <ul id="settings-gl-reading-list" style="list-style:none;padding:0;margin:0 0 1rem 0;display:flex;flex-direction:column;gap:0.4rem;">
+        <li style="color:var(--text-secondary);font-size:0.85rem;">Loading…</li>
+      </ul>
+      <button class="btn btn-secondary" onclick="settingsGLAddReading()">+ Add Book / Article</button>
+    </div>
+
+    <hr style="border-color:var(--border-color);margin:1.5rem 0;">
+
+    <!-- Useful links editor -->
+    <div id="settings-gl-links-section">
+      <h4 style="margin-bottom:0.75rem;">Useful Links</h4>
+      <ul id="settings-gl-links-list" style="list-style:none;padding:0;margin:0 0 1rem 0;display:flex;flex-direction:column;gap:0.4rem;">
+        <li style="color:var(--text-secondary);font-size:0.85rem;">Loading…</li>
+      </ul>
+      <button class="btn btn-secondary" onclick="settingsGLAddLink()">+ Add Link</button>
     </div>
   `;
-  document.body.insertAdjacentHTML('beforeend', html);
-  document.getElementById('course-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const newCourse = {
-      icon: document.getElementById('course-icon-input').value,
-      title: document.getElementById('course-title-input').value.trim(),
-      description: document.getElementById('course-desc-input').value.trim(),
-      lessons: document.getElementById('course-lessons-input').value.trim(),
-      level: document.getElementById('course-level-input').value
-    };
-    const courses = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
-    courses.push(newCourse);
-    await saveGLData({ courses });
-    document.getElementById('course-modal').remove();
-    displayGLUniversity();
+  settingsContainer.appendChild(section);
+
+  // Render immediately on first inject
+  refreshSettingsGLEditor();
+}
+
+// Re-render the inline GL University editor inside Settings
+async function refreshSettingsGLEditor() {
+  if (!authManager.isAdmin()) return;
+  await loadGLUniversityData();
+  renderSettingsGLCourses();
+  renderSettingsGLReading();
+  renderSettingsGLLinks();
+}
+
+// ── Settings GL: Course list ──────────────────────────────────────────────────
+function renderSettingsGLCourses() {
+  const container = document.getElementById('settings-gl-courses-list');
+  if (!container) return;
+
+  const courses = glData.courses.length ? glData.courses : DEFAULT_COURSES;
+
+  if (!courses.length) {
+    container.innerHTML = '<span style="color:var(--text-secondary);font-size:0.85rem;">No courses yet. Click "+ Add Course" to create one.</span>';
+    return;
+  }
+
+  container.innerHTML = courses.map((c, idx) => `
+    <div class="settings-gl-course-row" style="display:flex;align-items:center;gap:0.75rem;background:var(--surface);border:1px solid var(--border-color);border-radius:8px;padding:0.65rem 1rem;">
+      <span style="font-size:1.2rem;flex-shrink:0;">${escHtml(c.icon || '📚')}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:0.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.title || '')}</div>
+        <div style="font-size:0.78rem;color:var(--text-secondary);">${escHtml(c.lessons || '')} &bull; ${escHtml(c.level || '')}</div>
+      </div>
+      <div style="display:flex;gap:0.4rem;flex-shrink:0;">
+        <button class="btn btn-secondary action-btn" style="font-size:0.78rem;padding:0.3rem 0.65rem;"
+                onclick="settingsGLEditCourse(${idx})">Edit</button>
+        <button class="btn btn-danger action-btn" style="font-size:0.78rem;padding:0.3rem 0.65rem;"
+                onclick="settingsGLDeleteCourse(${idx})">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function settingsGLAddCourse() {
+  if (!authManager.isAdmin()) return;
+  const icons = ['📊','📈','🧠','💰','🎯','📉','📚','🔗','⚡','🎓'];
+  _openCourseModal({
+    title: 'Add Course',
+    course: { icon: '📊', title: '', description: '', lessons: '', level: 'Beginner' },
+    icons,
+    onSubmit: async (courseObj) => {
+      const base = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
+      base.push(courseObj);
+      await saveGLData({ courses: base });
+      renderSettingsGLCourses();
+      // Also refresh GL University page if it's been rendered
+      if (currentPage === 'university') displayGLUniversity();
+    }
+  });
+}
+
+function settingsGLEditCourse(idx) {
+  if (!authManager.isAdmin()) return;
+  const icons = ['📊','📈','🧠','💰','🎯','📉','📚','🔗','⚡','🎓'];
+  const base  = glData.courses.length ? glData.courses : DEFAULT_COURSES;
+  _openCourseModal({
+    title: 'Edit Course',
+    course: base[idx],
+    icons,
+    submitLabel: 'Save Changes',
+    onSubmit: async (courseObj) => {
+      const updated = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
+      updated[idx] = courseObj;
+      await saveGLData({ courses: updated });
+      renderSettingsGLCourses();
+      if (currentPage === 'university') displayGLUniversity();
+    }
+  });
+}
+
+async function settingsGLDeleteCourse(idx) {
+  if (!authManager.isAdmin()) return;
+  if (!confirm('Delete this course?')) return;
+  const courses = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
+  courses.splice(idx, 1);
+  await saveGLData({ courses });
+  renderSettingsGLCourses();
+  if (currentPage === 'university') displayGLUniversity();
+}
+
+// ── Settings GL: Reading list ─────────────────────────────────────────────────
+function renderSettingsGLReading() {
+  const ul = document.getElementById('settings-gl-reading-list');
+  if (!ul) return;
+
+  const list = glData.readingList.length ? glData.readingList : DEFAULT_READING;
+
+  if (!list.length) {
+    ul.innerHTML = '<li style="color:var(--text-secondary);font-size:0.85rem;">No reading items yet.</li>';
+    return;
+  }
+
+  ul.innerHTML = list.map((item, idx) => `
+    <li class="gl-resource-row">
+      <span style="font-size:0.88rem;">${escHtml(item.title)}${item.author ? ' <span style="color:var(--text-secondary);">— ' + escHtml(item.author) + '</span>' : ''}</span>
+      <span class="admin-row-btns">
+        <button class="admin-inline-btn edit-btn" onclick="settingsGLEditReading(${idx})">Edit</button>
+        <button class="admin-inline-btn" onclick="settingsGLDeleteReading(${idx})">✕</button>
+      </span>
+    </li>
+  `).join('');
+}
+
+function settingsGLAddReading() {
+  if (!authManager.isAdmin()) return;
+  _openReadingModal({
+    title: 'Add Reading Item',
+    item: { title: '', author: '' },
+    onSubmit: async (item) => {
+      const base = glData.readingList.length ? [...glData.readingList] : [...DEFAULT_READING];
+      base.push(item);
+      await saveGLData({ readingList: base });
+      renderSettingsGLReading();
+      if (currentPage === 'university') displayGLUniversity();
+    }
+  });
+}
+
+function settingsGLEditReading(idx) {
+  if (!authManager.isAdmin()) return;
+  const list = glData.readingList.length ? glData.readingList : DEFAULT_READING;
+  _openReadingModal({
+    title: 'Edit Reading Item',
+    item: list[idx],
+    submitLabel: 'Save Changes',
+    onSubmit: async (item) => {
+      const updated = glData.readingList.length ? [...glData.readingList] : [...DEFAULT_READING];
+      updated[idx] = item;
+      await saveGLData({ readingList: updated });
+      renderSettingsGLReading();
+      if (currentPage === 'university') displayGLUniversity();
+    }
+  });
+}
+
+async function settingsGLDeleteReading(idx) {
+  if (!authManager.isAdmin()) return;
+  if (!confirm('Remove this reading item?')) return;
+  const list = glData.readingList.length ? [...glData.readingList] : [...DEFAULT_READING];
+  list.splice(idx, 1);
+  await saveGLData({ readingList: list });
+  renderSettingsGLReading();
+  if (currentPage === 'university') displayGLUniversity();
+}
+
+// ── Settings GL: Links ────────────────────────────────────────────────────────
+function renderSettingsGLLinks() {
+  const ul = document.getElementById('settings-gl-links-list');
+  if (!ul) return;
+
+  const list = glData.externalLinks.length ? glData.externalLinks : DEFAULT_LINKS;
+
+  if (!list.length) {
+    ul.innerHTML = '<li style="color:var(--text-secondary);font-size:0.85rem;">No links yet.</li>';
+    return;
+  }
+
+  ul.innerHTML = list.map((item, idx) => `
+    <li class="gl-resource-row">
+      <span style="font-size:0.88rem;">${escHtml(item.title)}</span>
+      <span class="admin-row-btns">
+        <button class="admin-inline-btn edit-btn" onclick="settingsGLEditLink(${idx})">Edit</button>
+        <button class="admin-inline-btn" onclick="settingsGLDeleteLink(${idx})">✕</button>
+      </span>
+    </li>
+  `).join('');
+}
+
+function settingsGLAddLink() {
+  if (!authManager.isAdmin()) return;
+  _openLinkModal({
+    title: 'Add Useful Link',
+    item: { title: '', url: '' },
+    onSubmit: async (item) => {
+      const base = glData.externalLinks.length ? [...glData.externalLinks] : [...DEFAULT_LINKS];
+      base.push(item);
+      await saveGLData({ externalLinks: base });
+      renderSettingsGLLinks();
+      if (currentPage === 'university') displayGLUniversity();
+    }
+  });
+}
+
+function settingsGLEditLink(idx) {
+  if (!authManager.isAdmin()) return;
+  const list = glData.externalLinks.length ? glData.externalLinks : DEFAULT_LINKS;
+  _openLinkModal({
+    title: 'Edit Useful Link',
+    item: list[idx],
+    submitLabel: 'Save Changes',
+    onSubmit: async (item) => {
+      const updated = glData.externalLinks.length ? [...glData.externalLinks] : [...DEFAULT_LINKS];
+      updated[idx] = item;
+      await saveGLData({ externalLinks: updated });
+      renderSettingsGLLinks();
+      if (currentPage === 'university') displayGLUniversity();
+    }
+  });
+}
+
+async function settingsGLDeleteLink(idx) {
+  if (!authManager.isAdmin()) return;
+  if (!confirm('Remove this link?')) return;
+  const list = glData.externalLinks.length ? [...glData.externalLinks] : [...DEFAULT_LINKS];
+  list.splice(idx, 1);
+  await saveGLData({ externalLinks: list });
+  renderSettingsGLLinks();
+  if (currentPage === 'university') displayGLUniversity();
+}
+
+// ─── Admin: Course CRUD ────────────────────────────────────────────────────────
+function openAddCourseModal() {
+  if (!authManager.isAdmin()) return;
+  const icons = ['📊','📈','🧠','💰','🎯','📉','📚','🔗','⚡','🎓'];
+  _openCourseModal({
+    title: 'Add Course',
+    course: { icon: '📊', title: '', description: '', lessons: '', level: 'Beginner' },
+    icons,
+    onSubmit: async (courseObj) => {
+      // If still using defaults, seed Firestore with defaults first so edit buttons appear
+      const base = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
+      base.push(courseObj);
+      await saveGLData({ courses: base });
+      displayGLUniversity();
+    }
   });
 }
 
 function openEditCourseModal(idx) {
-  const courses = glData.courses.length ? glData.courses : DEFAULT_COURSES;
-  const c = courses[idx];
+  if (!authManager.isAdmin()) return;
   const icons = ['📊','📈','🧠','💰','🎯','📉','📚','🔗','⚡','🎓'];
-  const html = `
-    <div id="course-modal" class="modal active">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Edit Course</h3>
-          <button class="modal-close" onclick="document.getElementById('course-modal').remove()">&times;</button>
-        </div>
-        <form id="course-form" style="padding:1.5rem;">
-          <div class="form-group">
-            <label>Icon</label>
-            <select id="course-icon-input" class="setting-input">
-              ${icons.map(i => `<option value="${i}" ${i === c.icon ? 'selected' : ''}>${i}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-group" style="margin-top:1rem;">
-            <label>Title</label>
-            <input type="text" id="course-title-input" class="setting-input" required value="${c.title || ''}">
-          </div>
-          <div class="form-group" style="margin-top:1rem;">
-            <label>Description</label>
-            <textarea id="course-desc-input" class="setting-input" rows="3" required>${c.description || ''}</textarea>
-          </div>
-          <div class="form-group" style="margin-top:1rem;">
-            <label>Lessons</label>
-            <input type="text" id="course-lessons-input" class="setting-input" value="${c.lessons || ''}">
-          </div>
-          <div class="form-group" style="margin-top:1rem;">
-            <label>Level</label>
-            <select id="course-level-input" class="setting-input">
-              ${['Beginner','Intermediate','Advanced','All Levels'].map(l => `<option ${l === c.level ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('course-modal').remove()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-          </div>
-        </form>
+  const base  = glData.courses.length ? glData.courses : DEFAULT_COURSES;
+  _openCourseModal({
+    title: 'Edit Course',
+    course: base[idx],
+    icons,
+    submitLabel: 'Save Changes',
+    onSubmit: async (courseObj) => {
+      const updated = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
+      updated[idx] = courseObj;
+      await saveGLData({ courses: updated });
+      displayGLUniversity();
+    }
+  });
+}
+
+// Shared modal builder for Add / Edit course
+function _openCourseModal({ title, course, icons, submitLabel = 'Save Course', onSubmit }) {
+  const existing = document.getElementById('gl-course-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'gl-course-modal';
+  modal.className = 'modal active';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>${escHtml(title)}</h3>
+        <button class="modal-close" id="gl-course-modal-close">&times;</button>
       </div>
+      <form id="gl-course-form" style="padding:1.5rem;">
+        <div class="form-group">
+          <label>Icon</label>
+          <select id="gc-icon" class="setting-input">
+            ${icons.map(i => `<option value="${i}"${i === course.icon ? ' selected' : ''}>${i}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
+          <label>Category Name</label>
+          <input type="text" id="gc-title" class="setting-input" required
+                 placeholder="e.g. Risk Management Fundamentals"
+                 value="${escAttr(course.title || '')}">
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
+          <label>Description</label>
+          <textarea id="gc-desc" class="setting-input" rows="3" required
+                    placeholder="Short description">${escHtml(course.description || '')}</textarea>
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
+          <label>Number of Lessons (e.g. "8 Lessons")</label>
+          <input type="text" id="gc-lessons" class="setting-input"
+                 placeholder="8 Lessons" value="${escAttr(course.lessons || '')}">
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
+          <label>Level</label>
+          <select id="gc-level" class="setting-input">
+            ${['Beginner','Intermediate','Advanced','All Levels'].map(l =>
+              `<option${l === course.level ? ' selected' : ''}>${l}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="gl-course-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">${escHtml(submitLabel)}</button>
+        </div>
+      </form>
     </div>
   `;
-  document.body.insertAdjacentHTML('beforeend', html);
-  document.getElementById('course-form').addEventListener('submit', async (e) => {
+
+  document.body.appendChild(modal);
+
+  const close = () => modal.remove();
+  document.getElementById('gl-course-modal-close').addEventListener('click', close);
+  document.getElementById('gl-course-modal-cancel').addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+
+  document.getElementById('gl-course-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const updatedCourses = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
-    updatedCourses[idx] = {
-      icon: document.getElementById('course-icon-input').value,
-      title: document.getElementById('course-title-input').value.trim(),
-      description: document.getElementById('course-desc-input').value.trim(),
-      lessons: document.getElementById('course-lessons-input').value.trim(),
-      level: document.getElementById('course-level-input').value
-    };
-    await saveGLData({ courses: updatedCourses });
-    document.getElementById('course-modal').remove();
-    displayGLUniversity();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try {
+      await onSubmit({
+        icon:        document.getElementById('gc-icon').value,
+        title:       document.getElementById('gc-title').value.trim(),
+        description: document.getElementById('gc-desc').value.trim(),
+        lessons:     document.getElementById('gc-lessons').value.trim(),
+        level:       document.getElementById('gc-level').value
+      });
+      close();
+    } catch (err) {
+      console.error('Error saving course:', err);
+      alert('Error saving. Please try again.');
+      btn.disabled = false; btn.textContent = submitLabel;
+    }
   });
 }
 
 async function deleteCourse(idx) {
+  if (!authManager.isAdmin()) return;
   if (!confirm('Delete this course?')) return;
   const courses = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
   courses.splice(idx, 1);
@@ -977,47 +1268,96 @@ async function deleteCourse(idx) {
   displayGLUniversity();
 }
 
-// ─── Admin: Reading List CRUD ─────────────────────────────────────────────────
+// ─── Admin: Reading List CRUD ──────────────────────────────────────────────────
 function openAddReadingModal() {
-  const html = `
-    <div id="reading-modal" class="modal active">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Add Reading</h3>
-          <button class="modal-close" onclick="document.getElementById('reading-modal').remove()">&times;</button>
-        </div>
-        <form id="reading-form" style="padding:1.5rem;">
-          <div class="form-group">
-            <label>Title</label>
-            <input type="text" id="reading-title-input" class="setting-input" required placeholder="Book or article title">
-          </div>
-          <div class="form-group" style="margin-top:1rem;">
-            <label>Author (optional)</label>
-            <input type="text" id="reading-author-input" class="setting-input" placeholder="Author name">
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('reading-modal').remove()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Add</button>
-          </div>
-        </form>
+  if (!authManager.isAdmin()) return;
+  _openReadingModal({
+    title: 'Add Reading Item',
+    item: { title: '', author: '' },
+    onSubmit: async (item) => {
+      // Seed from defaults if first custom save
+      const base = glData.readingList.length ? [...glData.readingList] : [...DEFAULT_READING];
+      base.push(item);
+      await saveGLData({ readingList: base });
+      displayGLUniversity();
+    }
+  });
+}
+
+function openEditReadingModal(idx) {
+  if (!authManager.isAdmin()) return;
+  const list = glData.readingList.length ? glData.readingList : DEFAULT_READING;
+  _openReadingModal({
+    title: 'Edit Reading Item',
+    item: list[idx],
+    submitLabel: 'Save Changes',
+    onSubmit: async (item) => {
+      const updated = [...glData.readingList];
+      updated[idx] = item;
+      await saveGLData({ readingList: updated });
+      displayGLUniversity();
+    }
+  });
+}
+
+function _openReadingModal({ title, item, submitLabel = 'Add', onSubmit }) {
+  const existing = document.getElementById('gl-reading-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'gl-reading-modal';
+  modal.className = 'modal active';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>${escHtml(title)}</h3>
+        <button class="modal-close" id="gl-reading-modal-close">&times;</button>
       </div>
+      <form id="gl-reading-form" style="padding:1.5rem;">
+        <div class="form-group">
+          <label>Title</label>
+          <input type="text" id="gr-title" class="setting-input" required
+                 placeholder="Book or article title" value="${escAttr(item.title || '')}">
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
+          <label>Author (optional)</label>
+          <input type="text" id="gr-author" class="setting-input"
+                 placeholder="Author name" value="${escAttr(item.author || '')}">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="gl-reading-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">${escHtml(submitLabel)}</button>
+        </div>
+      </form>
     </div>
   `;
-  document.body.insertAdjacentHTML('beforeend', html);
-  document.getElementById('reading-form').addEventListener('submit', async (e) => {
+
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  document.getElementById('gl-reading-modal-close').addEventListener('click', close);
+  document.getElementById('gl-reading-modal-cancel').addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+
+  document.getElementById('gl-reading-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const list = [...glData.readingList];
-    list.push({
-      title: document.getElementById('reading-title-input').value.trim(),
-      author: document.getElementById('reading-author-input').value.trim()
-    });
-    await saveGLData({ readingList: list });
-    document.getElementById('reading-modal').remove();
-    displayGLUniversity();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try {
+      await onSubmit({
+        title:  document.getElementById('gr-title').value.trim(),
+        author: document.getElementById('gr-author').value.trim()
+      });
+      close();
+    } catch (err) {
+      console.error('Error saving reading item:', err);
+      alert('Error saving. Please try again.');
+      btn.disabled = false; btn.textContent = submitLabel;
+    }
   });
 }
 
 async function deleteReadingItem(idx) {
+  if (!authManager.isAdmin()) return;
   if (!confirm('Remove this reading item?')) return;
   const list = [...glData.readingList];
   list.splice(idx, 1);
@@ -1025,47 +1365,95 @@ async function deleteReadingItem(idx) {
   displayGLUniversity();
 }
 
-// ─── Admin: Links CRUD ────────────────────────────────────────────────────────
+// ─── Admin: Links CRUD ─────────────────────────────────────────────────────────
 function openAddLinkModal() {
-  const html = `
-    <div id="link-modal" class="modal active">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Add Link</h3>
-          <button class="modal-close" onclick="document.getElementById('link-modal').remove()">&times;</button>
-        </div>
-        <form id="link-form" style="padding:1.5rem;">
-          <div class="form-group">
-            <label>Title</label>
-            <input type="text" id="link-title-input" class="setting-input" required placeholder="Link title">
-          </div>
-          <div class="form-group" style="margin-top:1rem;">
-            <label>URL</label>
-            <input type="url" id="link-url-input" class="setting-input" required placeholder="https://...">
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('link-modal').remove()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Add</button>
-          </div>
-        </form>
+  if (!authManager.isAdmin()) return;
+  _openLinkModal({
+    title: 'Add Useful Link',
+    item: { title: '', url: '' },
+    onSubmit: async (item) => {
+      const base = glData.externalLinks.length ? [...glData.externalLinks] : [...DEFAULT_LINKS];
+      base.push(item);
+      await saveGLData({ externalLinks: base });
+      displayGLUniversity();
+    }
+  });
+}
+
+function openEditLinkModal(idx) {
+  if (!authManager.isAdmin()) return;
+  const list = glData.externalLinks.length ? glData.externalLinks : DEFAULT_LINKS;
+  _openLinkModal({
+    title: 'Edit Useful Link',
+    item: list[idx],
+    submitLabel: 'Save Changes',
+    onSubmit: async (item) => {
+      const updated = [...glData.externalLinks];
+      updated[idx] = item;
+      await saveGLData({ externalLinks: updated });
+      displayGLUniversity();
+    }
+  });
+}
+
+function _openLinkModal({ title, item, submitLabel = 'Add', onSubmit }) {
+  const existing = document.getElementById('gl-link-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'gl-link-modal';
+  modal.className = 'modal active';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>${escHtml(title)}</h3>
+        <button class="modal-close" id="gl-link-modal-close">&times;</button>
       </div>
+      <form id="gl-link-form" style="padding:1.5rem;">
+        <div class="form-group">
+          <label>Title</label>
+          <input type="text" id="gl-link-title" class="setting-input" required
+                 placeholder="Link title" value="${escAttr(item.title || '')}">
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
+          <label>URL</label>
+          <input type="url" id="gl-link-url" class="setting-input" required
+                 placeholder="https://..." value="${escAttr(item.url || '')}">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="gl-link-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">${escHtml(submitLabel)}</button>
+        </div>
+      </form>
     </div>
   `;
-  document.body.insertAdjacentHTML('beforeend', html);
-  document.getElementById('link-form').addEventListener('submit', async (e) => {
+
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  document.getElementById('gl-link-modal-close').addEventListener('click', close);
+  document.getElementById('gl-link-modal-cancel').addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+
+  document.getElementById('gl-link-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const list = [...glData.externalLinks];
-    list.push({
-      title: document.getElementById('link-title-input').value.trim(),
-      url: document.getElementById('link-url-input').value.trim()
-    });
-    await saveGLData({ externalLinks: list });
-    document.getElementById('link-modal').remove();
-    displayGLUniversity();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try {
+      await onSubmit({
+        title: document.getElementById('gl-link-title').value.trim(),
+        url:   document.getElementById('gl-link-url').value.trim()
+      });
+      close();
+    } catch (err) {
+      console.error('Error saving link:', err);
+      alert('Error saving. Please try again.');
+      btn.disabled = false; btn.textContent = submitLabel;
+    }
   });
 }
 
 async function deleteLinkItem(idx) {
+  if (!authManager.isAdmin()) return;
   if (!confirm('Remove this link?')) return;
   const list = [...glData.externalLinks];
   list.splice(idx, 1);
@@ -1073,22 +1461,25 @@ async function deleteLinkItem(idx) {
   displayGLUniversity();
 }
 
-// ─── Firestore GL Save (merges so partial updates work) ───────────────────────
+// ─── Firestore GL Save ─────────────────────────────────────────────────────────
 async function saveGLData(partial) {
-  // Merge partial changes into glData first
-  if (partial.courses !== undefined) glData.courses = partial.courses;
-  if (partial.readingList !== undefined) glData.readingList = partial.readingList;
+  if (!authManager.isAdmin()) {
+    console.error('saveGLData: not admin — write blocked');
+    return;
+  }
+  if (partial.courses       !== undefined) glData.courses       = partial.courses;
+  if (partial.readingList   !== undefined) glData.readingList   = partial.readingList;
   if (partial.externalLinks !== undefined) glData.externalLinks = partial.externalLinks;
 
   await db.collection('global').doc('gl_university').set({
-    courses: glData.courses,
-    readingList: glData.readingList,
+    courses:       glData.courses,
+    readingList:   glData.readingList,
     externalLinks: glData.externalLinks,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    updatedAt:     firebase.firestore.FieldValue.serverTimestamp()
   });
 }
 
-// ─── Settings ─────────────────────────────────────────────────────────────────
+// ─── Settings ──────────────────────────────────────────────────────────────────
 function setupSettingsButtons() {
   const saveBtn = document.getElementById('save-settings-btn');
   if (saveBtn) {
@@ -1097,14 +1488,13 @@ function setupSettingsButtons() {
       saveBtn.textContent = 'Saving...';
       try {
         const settings = {
-          platformName: document.getElementById('setting-platform-name').value,
-          currency: document.getElementById('setting-currency').value,
-          brandColor: document.getElementById('setting-brand-color').value,
+          platformName:       document.getElementById('setting-platform-name').value,
+          currency:           document.getElementById('setting-currency').value,
+          brandColor:         document.getElementById('setting-brand-color').value,
           educationalEnabled: document.getElementById('setting-educational').checked,
-          sampleData: document.getElementById('setting-sample-data').checked
+          sampleData:         document.getElementById('setting-sample-data').checked
         };
         await db.collection('users').doc(currentUser).set({ settings }, { merge: true });
-        // Apply brand color live
         document.documentElement.style.setProperty('--primary-color', settings.brandColor);
         alert('Settings saved!');
       } catch (err) {
@@ -1121,14 +1511,14 @@ function setupSettingsButtons() {
   if (exportBtn) {
     exportBtn.addEventListener('click', () => {
       const data = {
-        trades: window.trades,
+        trades:  window.trades,
         playbooks: window.playbooks,
         journal: window.journalEntries
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
       a.download = 'gltrades-export.json';
       a.click();
       URL.revokeObjectURL(url);
@@ -1138,16 +1528,16 @@ function setupSettingsButtons() {
   const importBtn = document.getElementById('import-data-btn');
   if (importBtn) {
     importBtn.addEventListener('click', () => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json';
+      const input    = document.createElement('input');
+      input.type     = 'file';
+      input.accept   = '.json';
       input.onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
         try {
           const text = await file.text();
           const data = JSON.parse(text);
-          alert('Import is read successfully. Full import with Firestore sync coming soon.');
+          alert('Import read successfully. Full Firestore sync coming soon.');
           console.log('Import data:', data);
         } catch (err) {
           alert('Invalid JSON file.');
@@ -1164,12 +1554,18 @@ function setupSettingsButtons() {
       if (!confirm('Second confirmation: This will permanently delete all your trades, playbooks, and journal entries.')) return;
       try {
         const batch = db.batch();
-        window.trades.forEach(t => batch.delete(db.collection('users').doc(currentUser).collection('trades').doc(t.id)));
-        window.playbooks.forEach(p => batch.delete(db.collection('users').doc(currentUser).collection('playbooks').doc(p.id)));
-        window.journalEntries.forEach(j => batch.delete(db.collection('users').doc(currentUser).collection('journal').doc(j.id)));
+        window.trades.forEach(t =>
+          batch.delete(db.collection('users').doc(currentUser).collection('trades').doc(t.id))
+        );
+        window.playbooks.forEach(p =>
+          batch.delete(db.collection('users').doc(currentUser).collection('playbooks').doc(p.id))
+        );
+        window.journalEntries.forEach(j =>
+          batch.delete(db.collection('users').doc(currentUser).collection('journal').doc(j.id))
+        );
         await batch.commit();
-        window.trades = [];
-        window.playbooks = [];
+        window.trades         = [];
+        window.playbooks      = [];
         window.journalEntries = [];
         updateDashboard();
         alert('All data has been reset.');
@@ -1181,9 +1577,21 @@ function setupSettingsButtons() {
   }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 function formatCurrency(val) {
   if (val === null || val === undefined || isNaN(val)) return '$0.00';
   const n = parseFloat(val);
-  return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (n < 0 ? '-$' : '$') +
+    Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+// Simple HTML-escape helpers to prevent XSS in dynamic innerHTML
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function escAttr(str) { return escHtml(str); }
