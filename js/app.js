@@ -482,7 +482,8 @@ function renderMarketOverviewWidgets() {
   injectTradingViewWidget('tv-advanced-chart',
     'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js',
     {
-      autosize: true,
+      width: "100%",
+      height: "700",
       symbol: currentMarketSymbol,
       interval: 'D',
       timezone: 'America/New_York',
@@ -504,7 +505,8 @@ function renderMarketOverviewWidgets() {
   injectTradingViewWidget('tv-heatmap',
     'https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js',
     {
-      autosize: true,
+      width: "100%",
+      height: "700",
       exchange: 'US',
       dataSource: 'SPX500',
       grouping: 'sector',
