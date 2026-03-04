@@ -239,7 +239,6 @@ body {
     padding: 1.5rem;
     border-radius: var(--radius);
     box-shadow: var(--shadow-md);
-    height: 350px;
 }
 
 .chart-container.large {
@@ -250,11 +249,6 @@ body {
     margin-bottom: 1rem;
     color: var(--text-primary);
     font-size: 1.25rem;
-}
-
-#equity-chart {
-    height: 100% !important;
-    width: 100% !important;
 }
 
 /* TradingView widgets */
@@ -274,11 +268,6 @@ body {
     border-radius: var(--radius);
     overflow: hidden;
     background: var(--surface);
-}
-
-#tv-heatmap {
-    height: 520px;
-    width: 100%;
 }
 
 .tv-watchlist {
