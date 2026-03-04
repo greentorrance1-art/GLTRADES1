@@ -242,7 +242,8 @@ body {
     height: 350px;
 }
 
-#equity-chart {
+#equity-chart,
+#winloss-chart {
     width: 100% !important;
     height: 100% !important;
 }
