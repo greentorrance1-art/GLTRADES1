@@ -576,6 +576,7 @@ function renderWinLossChart(wins, losses, breakeven) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       plugins: { legend: { position: 'bottom' } }
     }
   });
@@ -1141,15 +1142,33 @@ function injectSettingsGLShortcut() {
 
   const section = document.createElement('div');
   section.id = 'settings-gl-shortcut';
-  section.className = 'settings-section';
+  section.className = 'settings-section admin-panel-box';
   section.innerHTML = `
-    <h3>GL University Content</h3>
+    <h3 style="color:var(--primary-color);">Trading Resources Manager</h3>
     <p style="color:var(--text-secondary);margin-bottom:1rem;font-size:0.9rem;">
-      As admin, you can edit course categories, lesson counts, reading list items, and useful links directly inside GL University.
+      As admin, you can manage GL University educational content including reading lists, useful links, and course resources.
     </p>
-    <button class="btn btn-primary" onclick="showPage('university')">Open GL University Editor</button>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:1.5rem;">
+      <button class="btn btn-primary" onclick="showPage('university')">Manage GL University</button>
+      <button class="btn btn-secondary" onclick="quickEditResources()">Quick Edit Resources</button>
+    </div>
+    <p style="margin-top:1rem;font-size:0.85rem;color:var(--text-secondary);">
+      Navigate to GL University to add/edit courses, reading list, and useful links. Changes are saved to Firestore automatically.
+    </p>
   `;
   settingsContainer.appendChild(section);
+}
+
+// Quick access function for editing resources from settings
+function quickEditResources() {
+  showPage('university');
+  // Scroll to resources section
+  setTimeout(() => {
+    const resourcesSection = document.querySelector('#university-page .section');
+    if (resourcesSection) {
+      resourcesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 100);
 }
 
 // ─── Admin: Course CRUD ────────────────────────────────────────────────────────
