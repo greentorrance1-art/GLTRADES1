@@ -257,13 +257,11 @@ body {
     grid-template-columns: 2fr 1fr;
     gap: 1rem;
     margin-top: 0.75rem;
-    align-items: stretch;
 }
 
 .tv-widget {
     width: 100%;
-    height: 520px;
-    min-height: 520px;
+    min-height: 420px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
     overflow: hidden;
@@ -271,11 +269,24 @@ body {
 }
 
 .tv-watchlist {
-    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
     margin-top: 0.75rem;
+}
+
+.tv-watchlist button {
+    background: var(--surface);
+    color: var(--text-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    overflow: hidden;
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.tv-watchlist button.active {
+    border-color: var(--primary-color);
 }
 
 @media (max-width: 900px) {
@@ -283,41 +294,8 @@ body {
         grid-template-columns: 1fr;
     }
     .tv-widget {
-        height: 420px;
-        min-height: 420px;
+        min-height: 380px;
     }
-}
-
-/* Journal preview thumbs (new uploader UI) */
-.preview-thumb {
-    position: relative;
-    width: 90px;
-    height: 90px;
-}
-
-.preview-thumb img {
-    width: 90px;
-    height: 90px;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    object-fit: cover;
-    display: block;
-}
-
-.preview-remove {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    border: 1px solid var(--border-color);
-    background: var(--surface);
-    color: var(--text-primary);
-    cursor: pointer;
-    display: grid;
-    place-items: center;
-    line-height: 1;
 }
 
 /* Journal image upload */
@@ -960,36 +938,5 @@ form {
 }
 
 
-/* ─── Market Overview (TradingView) ───────────────────────────────────────── */
-.market-overview-card{
-  background: var(--card-bg, #ffffff);
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 16px;
-  padding: 1.5rem;
-  margin: 1.5rem 0;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.06);
-}
-.market-overview-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;}
-.tv-ticker-tape{margin:0.5rem 0 1rem 0;}
-.market-widgets{display:flex;gap:1rem;align-items:stretch;}
-.tv-chart-wrap, .tv-heatmap-wrap{flex:1;min-width:0;border-radius:12px;overflow:hidden;background:#0b1220;border:1px solid rgba(255,255,255,0.08);} 
-.tv-chart-wrap{flex:2;}
-.tv-advanced-chart{height:440px;width:100%;}
-.tv-heatmap{height:440px;width:100%;}
-@media (max-width: 980px){.market-widgets{flex-direction:column;}.tv-advanced-chart,.tv-heatmap{height:420px;}}
-
-/* ─── Journal image upload ───────────────────────────────────────────────── */
-.dropzone{border:2px dashed var(--border-color, #e5e7eb);border-radius:12px;padding:1rem;background:rgba(0,0,0,0.02);cursor:pointer;}
-.dropzone.dragover{border-color:var(--primary-color, #10b981);background:rgba(16,185,129,0.08);} 
-.dropzone-text{color:var(--text-secondary, #6b7280);font-size:0.9rem;}
-.image-previews{display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.75rem;}
-.preview-thumb{position:relative;width:78px;height:78px;border-radius:10px;overflow:hidden;border:1px solid var(--border-color, #e5e7eb);background:#fff;}
-.preview-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
-.preview-remove{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:999px;border:none;background:rgba(0,0,0,0.6);color:#fff;font-size:16px;line-height:22px;cursor:pointer;}
-.journal-images{display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.75rem;}
-.journal-images img{width:120px;height:90px;object-fit:cover;border-radius:10px;border:1px solid var(--border-color, #e5e7eb);} 
-.helper-text{color:var(--text-secondary, #6b7280);font-size:0.85rem;margin:0.5rem 0 1rem 0;}
-.settings-divider{border:none;border-top:1px solid var(--border-color, #e5e7eb);margin:1.5rem 0;}
-.form-grid{display:grid;grid-template-columns:repeat(3, minmax(0,1fr));gap:1rem;}
-@media (max-width: 900px){.form-grid{grid-template-columns:1fr;}}
-.checkbox-row{display:flex;gap:0.6rem;align-items:center;margin:0.5rem 0;}
+/* heatmap height match */
+#tv-advanced-chart, #tv-heatmap{height:420px;}
