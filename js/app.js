@@ -17,9 +17,6 @@ window.userSettings = {};
 // Journal image staging (files selected before save)
 let pendingJournalImages = [];
 
-// Journal images (current implementation uses this array)
-let journalImageFiles = [];
-
 // TradingView market overview state
 let currentMarketSymbol = 'NASDAQ:AAPL';
 
