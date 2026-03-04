@@ -39,6 +39,11 @@ window.initializeApp = async function () {
   setupSettingsButtons();
   setupRoleBasedUI();
 
+  // Enable admin controls for GL University
+  if (auth.currentUser?.email === ADMIN_EMAIL) {
+    enableUniversityAdmin();
+  }
+
   // Build TradingView widgets on dashboard
   initMarketOverview();
 
@@ -549,6 +554,7 @@ function renderEquityChart(trades) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         y: { ticks: { callback: v => '$' + v.toLocaleString() } }
@@ -883,22 +889,13 @@ function setupJournalModal() {
 }
 
 async function uploadJournalImages(files) {
-  if (!files || !files.length) return [];
-  if (!currentUser) return [];
-  if (!firebase || !firebase.storage) return [];
-
-  const storage = firebase.storage();
-
-  const uploads = files.map(async (file) => {
-    const safeName = (file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path = `users/${currentUser}/journal/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
-    const ref = storage.ref().child(path);
-
-    const uploadPromise = ref.put(file).then(snap => snap.ref.getDownloadURL());
-    const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('Upload timeout')), 30000));
-    return Promise.race([uploadPromise, timeoutPromise]);
-  });
-
+  const uploads = [];
+  for (const file of files) {
+    const ref = storage.ref().child(`journal/${Date.now()}_${file.name}`);
+    uploads.push(
+      ref.put(file).then(s => s.ref.getDownloadURL())
+    );
+  }
   return Promise.all(uploads);
 }
 
@@ -912,14 +909,18 @@ async function saveJournalEntry() {
   try {
     if (!currentUser) throw new Error('Not signed in');
 
-    const images = await uploadJournalImages(journalImageFiles);
+    const files = journalImageFiles;
+    let imageUrls = [];
+    if (files.length > 0) {
+      imageUrls = await uploadJournalImages(files);
+    }
 
     const data = {
       date: document.getElementById('journal-date').value,
       title: document.getElementById('journal-title').value.trim(),
       entry: document.getElementById('journal-entry').value.trim(),
       mood: document.getElementById('journal-mood').value,
-      images,
+      images: imageUrls,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
@@ -1119,6 +1120,17 @@ function setupRoleBasedUI() {
 
     // Also inject a "Manage GL University" shortcut into the Settings page
     injectSettingsGLShortcut();
+  }
+}
+
+function enableUniversityAdmin() {
+  // Enable admin editing tools for GL University
+  const panel = document.getElementById('admin-university-panel');
+  if (panel) panel.style.display = 'block';
+
+  // Refresh the GL University page to show admin controls
+  if (currentPage === 'university') {
+    displayGLUniversity();
   }
 }
 
@@ -1667,13 +1679,3 @@ function escHtml(str) {
     .replace(/'/g, '&#39;');
 }
 function escAttr(str) { return escHtml(str); }
-
-
-function enableUniversityAdmin(){
-console.log("Admin controls enabled");
-}
-firebase.auth().onAuthStateChanged(user=>{
-if(user && user.email === ADMIN_EMAIL){
-enableUniversityAdmin();
-}
-});
