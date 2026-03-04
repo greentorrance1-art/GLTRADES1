@@ -66,7 +66,6 @@ function showPage(page) {
   if (page === 'playbooks') displayPlaybooks();
   if (page === 'journal') displayJournal();
   if (page === 'university') displayGLUniversity();
-  if (page === 'settings' && authManager.isAdmin()) refreshSettingsGLEditor();
 }
 
 // ─── Trade Modal ──────────────────────────────────────────────────────────────
@@ -254,6 +253,9 @@ function updateDashboard() {
   renderEquityChart(trades);
   renderWinLossChart(wins.length, losses.length, trades.filter(t => t.outcome === 'breakeven').length);
   renderRecentTrades(trades.slice(0, 10));
+
+  // Optional: free market widget
+  renderTradingViewMarketOverview();
 }
 
 function renderRecentTrades(trades) {
@@ -277,6 +279,70 @@ function renderRecentTrades(trades) {
   `).join('');
 }
 
+
+
+// ─── TradingView Widget (free) ─────────────────────────────────────────
+function renderTradingViewMarketOverview() {
+  const host = document.getElementById('tv-market-overview');
+  if (!host) return;
+  // Prevent duplicate widgets/scripts
+  if (host.dataset.loaded === '1') return;
+  host.dataset.loaded = '1';
+
+  const container = document.createElement('div');
+  container.className = 'tradingview-widget-container';
+  container.innerHTML = `
+    <div class="tradingview-widget-container__widget"></div>
+    <div class="tradingview-widget-copyright" style="display:none;"></div>
+  `;
+  host.appendChild(container);
+
+  const script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js';
+  script.async = true;
+  script.innerHTML = JSON.stringify({
+    colorTheme: "dark",
+    dateRange: "12M",
+    showChart: true,
+    locale: "en",
+    largeChartUrl: "",
+    isTransparent: true,
+    showSymbolLogo: true,
+    showFloatingTooltip: true,
+    width: "100%",
+    height: "420",
+    plotLineColorGrowing: "rgba(16, 185, 129, 1)",
+    plotLineColorFalling: "rgba(239, 68, 68, 1)",
+    gridLineColor: "rgba(148, 163, 184, 0.06)",
+    scaleFontColor: "rgba(148, 163, 184, 1)",
+    belowLineFillColorGrowing: "rgba(16, 185, 129, 0.05)",
+    belowLineFillColorFalling: "rgba(239, 68, 68, 0.05)",
+    belowLineFillColorGrowingBottom: "rgba(16, 185, 129, 0.0)",
+    belowLineFillColorFallingBottom: "rgba(239, 68, 68, 0.0)",
+    symbolActiveColor: "rgba(148, 163, 184, 0.12)",
+    tabs: [
+      { title: "Indices", symbols: [
+        { s: "FOREXCOM:SPXUSD", d: "S&P 500" },
+        { s: "FOREXCOM:NSXUSD", d: "Nasdaq 100" },
+        { s: "FOREXCOM:DJI", d: "Dow 30" },
+        { s: "INDEX:RSI", d: "Russell 2000" }
+      ]},
+      { title: "Futures", symbols: [
+        { s: "CME_MINI:NQ1!", d: "Nasdaq 100" },
+        { s: "CME_MINI:ES1!", d: "S&P 500" },
+        { s: "CME_MINI:YM1!", d: "Dow 30" },
+        { s: "CME_MINI:RTY1!", d: "Russell 2000" }
+      ]},
+      { title: "Forex", symbols: [
+        { s: "FX:EURUSD", d: "EUR/USD" },
+        { s: "FX:GBPUSD", d: "GBP/USD" },
+        { s: "FX:USDJPY", d: "USD/JPY" }
+      ]}
+    ]
+  });
+  container.appendChild(script);
+}
 // ─── Trades Page ──────────────────────────────────────────────────────────────
 function displayTrades() {
   const search = (document.getElementById('trade-search')?.value || '').toLowerCase();
@@ -709,13 +775,15 @@ function displayJournal() {
 
 // ─── GL University ─────────────────────────────────────────────────────────────
 // ── These are the hardcoded defaults shown until admin saves custom content ──
+const DEFAULT_DISCORD_LINK = 'https://discord.gg/YOUR_INVITE';
+
 const DEFAULT_COURSES = [
-  { icon: '📊', title: 'Risk Management Fundamentals',  description: 'Learn the essential principles of position sizing, stop losses, and portfolio risk management.', lessons: '8 Lessons',  level: 'Beginner'     },
-  { icon: '📈', title: 'Technical Analysis Mastery',    description: 'Master chart patterns, indicators, and price action trading strategies.',                          lessons: '12 Lessons', level: 'Intermediate' },
-  { icon: '🧠', title: 'Trading Psychology',            description: 'Develop mental discipline, emotional control, and winning trading habits.',                         lessons: '10 Lessons', level: 'All Levels'   },
-  { icon: '💰', title: 'Options Trading Strategies',    description: 'Understand options mechanics, spreads, and advanced trading strategies.',                           lessons: '15 Lessons', level: 'Advanced'     },
-  { icon: '🎯', title: 'Building Trading Systems',      description: 'Create, backtest, and optimize profitable trading systems and strategies.',                         lessons: '10 Lessons', level: 'Advanced'     },
-  { icon: '📉', title: 'Market Analysis & Research',   description: 'Develop skills in fundamental analysis, market research, and trade idea generation.',               lessons: '9 Lessons',  level: 'Intermediate' }
+  { icon: '📊', title: 'Risk Management Fundamentals',  description: 'Learn the essential principles of position sizing, stop losses, and portfolio risk management.', lessons: '8 Lessons',  level: 'Beginner'     , link: '' },
+  { icon: '📈', title: 'Technical Analysis Mastery',    description: 'Master chart patterns, indicators, and price action trading strategies.',                          lessons: '12 Lessons', level: 'Intermediate' , link: '' },
+  { icon: '🧠', title: 'Trading Psychology',            description: 'Develop mental discipline, emotional control, and winning trading habits.',                         lessons: '10 Lessons', level: 'All Levels'   , link: '' },
+  { icon: '💰', title: 'Options Trading Strategies',    description: 'Understand options mechanics, spreads, and advanced trading strategies.',                           lessons: '15 Lessons', level: 'Advanced'     , link: '' },
+  { icon: '🎯', title: 'Building Trading Systems',      description: 'Create, backtest, and optimize profitable trading systems and strategies.',                         lessons: '10 Lessons', level: 'Advanced'     , link: '' },
+  { icon: '📉', title: 'Market Analysis & Research',   description: 'Develop skills in fundamental analysis, market research, and trade idea generation.',               lessons: '9 Lessons',  level: 'Intermediate' , link: '' }
 ];
 
 const DEFAULT_READING = [
@@ -779,7 +847,7 @@ async function displayGLUniversity() {
           <span>${escHtml(c.lessons || '')}</span>
           <span>${escHtml(c.level || '')}</span>
         </div>
-        <button class="btn btn-outline">Start Learning</button>
+        <button class="btn btn-outline" onclick="openGLCourseLink(${idx})">Start Learning</button>
         ${isAdmin ? `
           <div class="admin-course-actions">
             <button class="btn btn-secondary action-btn" onclick="openEditCourseModal(${idx})">Edit</button>
@@ -831,6 +899,23 @@ async function displayGLUniversity() {
   }
 }
 
+
+
+// Open course link (Start Learning)
+function openGLCourseLink(idx) {
+  try {
+    const courses = (glData && glData.courses && glData.courses.length) ? glData.courses : DEFAULT_COURSES;
+    const c = courses[idx] || {};
+    const url = (c.link || c.url || '').trim() || DEFAULT_DISCORD_LINK;
+    if (!url) {
+      alert('No link set for this course yet.');
+      return;
+    }
+    window.open(url, '_blank', 'noopener');
+  } catch (e) {
+    console.error('openGLCourseLink error:', e);
+  }
+}
 // ─── Admin Panel ──────────────────────────────────────────────────────────────
 // setupRoleBasedUI is called from initializeApp AFTER userRole is loaded.
 // It injects the admin panel into the university page DOM and marks it visible.
@@ -877,7 +962,7 @@ function buildAdminPanel() {
   }
 }
 
-// Inject the full GL University admin editor directly into the Settings page
+// Inject a shortcut button into Settings so admin can jump to GL University editing
 function injectSettingsGLShortcut() {
   if (document.getElementById('settings-gl-shortcut')) return;
   const settingsContainer = document.querySelector('#settings-page .settings-container');
@@ -885,261 +970,15 @@ function injectSettingsGLShortcut() {
 
   const section = document.createElement('div');
   section.id = 'settings-gl-shortcut';
-  section.className = 'settings-section admin-panel-box';
+  section.className = 'settings-section';
   section.innerHTML = `
-    <h3 style="color:var(--primary-color);margin-bottom:0.5rem;">GL University — Admin Editor</h3>
-    <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1.5rem;">
-      Edit course categories, lesson counts, reading list, and useful links. Changes save directly to Firestore.
+    <h3>GL University Content</h3>
+    <p style="color:var(--text-secondary);margin-bottom:1rem;font-size:0.9rem;">
+      As admin, you can edit course categories, lesson counts, reading list items, and useful links directly inside GL University.
     </p>
-
-    <!-- Course category editor -->
-    <div id="settings-gl-courses-section">
-      <h4 style="margin-bottom:0.75rem;">Course Categories</h4>
-      <div id="settings-gl-courses-list" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;">
-        <span style="color:var(--text-secondary);font-size:0.85rem;">Loading…</span>
-      </div>
-      <button class="btn btn-primary" style="margin-bottom:2rem;" onclick="settingsGLAddCourse()">+ Add Course</button>
-    </div>
-
-    <!-- Reading list editor -->
-    <div id="settings-gl-reading-section">
-      <h4 style="margin-bottom:0.75rem;">Reading List</h4>
-      <ul id="settings-gl-reading-list" style="list-style:none;padding:0;margin:0 0 1rem 0;display:flex;flex-direction:column;gap:0.4rem;">
-        <li style="color:var(--text-secondary);font-size:0.85rem;">Loading…</li>
-      </ul>
-      <button class="btn btn-secondary" onclick="settingsGLAddReading()">+ Add Book / Article</button>
-    </div>
-
-    <hr style="border-color:var(--border-color);margin:1.5rem 0;">
-
-    <!-- Useful links editor -->
-    <div id="settings-gl-links-section">
-      <h4 style="margin-bottom:0.75rem;">Useful Links</h4>
-      <ul id="settings-gl-links-list" style="list-style:none;padding:0;margin:0 0 1rem 0;display:flex;flex-direction:column;gap:0.4rem;">
-        <li style="color:var(--text-secondary);font-size:0.85rem;">Loading…</li>
-      </ul>
-      <button class="btn btn-secondary" onclick="settingsGLAddLink()">+ Add Link</button>
-    </div>
+    <button class="btn btn-primary" onclick="showPage('university')">Open GL University Editor</button>
   `;
   settingsContainer.appendChild(section);
-
-  // Render immediately on first inject
-  refreshSettingsGLEditor();
-}
-
-// Re-render the inline GL University editor inside Settings
-async function refreshSettingsGLEditor() {
-  if (!authManager.isAdmin()) return;
-  await loadGLUniversityData();
-  renderSettingsGLCourses();
-  renderSettingsGLReading();
-  renderSettingsGLLinks();
-}
-
-// ── Settings GL: Course list ──────────────────────────────────────────────────
-function renderSettingsGLCourses() {
-  const container = document.getElementById('settings-gl-courses-list');
-  if (!container) return;
-
-  const courses = glData.courses.length ? glData.courses : DEFAULT_COURSES;
-
-  if (!courses.length) {
-    container.innerHTML = '<span style="color:var(--text-secondary);font-size:0.85rem;">No courses yet. Click "+ Add Course" to create one.</span>';
-    return;
-  }
-
-  container.innerHTML = courses.map((c, idx) => `
-    <div class="settings-gl-course-row" style="display:flex;align-items:center;gap:0.75rem;background:var(--surface);border:1px solid var(--border-color);border-radius:8px;padding:0.65rem 1rem;">
-      <span style="font-size:1.2rem;flex-shrink:0;">${escHtml(c.icon || '📚')}</span>
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;font-size:0.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.title || '')}</div>
-        <div style="font-size:0.78rem;color:var(--text-secondary);">${escHtml(c.lessons || '')} &bull; ${escHtml(c.level || '')}</div>
-      </div>
-      <div style="display:flex;gap:0.4rem;flex-shrink:0;">
-        <button class="btn btn-secondary action-btn" style="font-size:0.78rem;padding:0.3rem 0.65rem;"
-                onclick="settingsGLEditCourse(${idx})">Edit</button>
-        <button class="btn btn-danger action-btn" style="font-size:0.78rem;padding:0.3rem 0.65rem;"
-                onclick="settingsGLDeleteCourse(${idx})">Delete</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-function settingsGLAddCourse() {
-  if (!authManager.isAdmin()) return;
-  const icons = ['📊','📈','🧠','💰','🎯','📉','📚','🔗','⚡','🎓'];
-  _openCourseModal({
-    title: 'Add Course',
-    course: { icon: '📊', title: '', description: '', lessons: '', level: 'Beginner' },
-    icons,
-    onSubmit: async (courseObj) => {
-      const base = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
-      base.push(courseObj);
-      await saveGLData({ courses: base });
-      renderSettingsGLCourses();
-      // Also refresh GL University page if it's been rendered
-      if (currentPage === 'university') displayGLUniversity();
-    }
-  });
-}
-
-function settingsGLEditCourse(idx) {
-  if (!authManager.isAdmin()) return;
-  const icons = ['📊','📈','🧠','💰','🎯','📉','📚','🔗','⚡','🎓'];
-  const base  = glData.courses.length ? glData.courses : DEFAULT_COURSES;
-  _openCourseModal({
-    title: 'Edit Course',
-    course: base[idx],
-    icons,
-    submitLabel: 'Save Changes',
-    onSubmit: async (courseObj) => {
-      const updated = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
-      updated[idx] = courseObj;
-      await saveGLData({ courses: updated });
-      renderSettingsGLCourses();
-      if (currentPage === 'university') displayGLUniversity();
-    }
-  });
-}
-
-async function settingsGLDeleteCourse(idx) {
-  if (!authManager.isAdmin()) return;
-  if (!confirm('Delete this course?')) return;
-  const courses = glData.courses.length ? [...glData.courses] : [...DEFAULT_COURSES];
-  courses.splice(idx, 1);
-  await saveGLData({ courses });
-  renderSettingsGLCourses();
-  if (currentPage === 'university') displayGLUniversity();
-}
-
-// ── Settings GL: Reading list ─────────────────────────────────────────────────
-function renderSettingsGLReading() {
-  const ul = document.getElementById('settings-gl-reading-list');
-  if (!ul) return;
-
-  const list = glData.readingList.length ? glData.readingList : DEFAULT_READING;
-
-  if (!list.length) {
-    ul.innerHTML = '<li style="color:var(--text-secondary);font-size:0.85rem;">No reading items yet.</li>';
-    return;
-  }
-
-  ul.innerHTML = list.map((item, idx) => `
-    <li class="gl-resource-row">
-      <span style="font-size:0.88rem;">${escHtml(item.title)}${item.author ? ' <span style="color:var(--text-secondary);">— ' + escHtml(item.author) + '</span>' : ''}</span>
-      <span class="admin-row-btns">
-        <button class="admin-inline-btn edit-btn" onclick="settingsGLEditReading(${idx})">Edit</button>
-        <button class="admin-inline-btn" onclick="settingsGLDeleteReading(${idx})">✕</button>
-      </span>
-    </li>
-  `).join('');
-}
-
-function settingsGLAddReading() {
-  if (!authManager.isAdmin()) return;
-  _openReadingModal({
-    title: 'Add Reading Item',
-    item: { title: '', author: '' },
-    onSubmit: async (item) => {
-      const base = glData.readingList.length ? [...glData.readingList] : [...DEFAULT_READING];
-      base.push(item);
-      await saveGLData({ readingList: base });
-      renderSettingsGLReading();
-      if (currentPage === 'university') displayGLUniversity();
-    }
-  });
-}
-
-function settingsGLEditReading(idx) {
-  if (!authManager.isAdmin()) return;
-  const list = glData.readingList.length ? glData.readingList : DEFAULT_READING;
-  _openReadingModal({
-    title: 'Edit Reading Item',
-    item: list[idx],
-    submitLabel: 'Save Changes',
-    onSubmit: async (item) => {
-      const updated = glData.readingList.length ? [...glData.readingList] : [...DEFAULT_READING];
-      updated[idx] = item;
-      await saveGLData({ readingList: updated });
-      renderSettingsGLReading();
-      if (currentPage === 'university') displayGLUniversity();
-    }
-  });
-}
-
-async function settingsGLDeleteReading(idx) {
-  if (!authManager.isAdmin()) return;
-  if (!confirm('Remove this reading item?')) return;
-  const list = glData.readingList.length ? [...glData.readingList] : [...DEFAULT_READING];
-  list.splice(idx, 1);
-  await saveGLData({ readingList: list });
-  renderSettingsGLReading();
-  if (currentPage === 'university') displayGLUniversity();
-}
-
-// ── Settings GL: Links ────────────────────────────────────────────────────────
-function renderSettingsGLLinks() {
-  const ul = document.getElementById('settings-gl-links-list');
-  if (!ul) return;
-
-  const list = glData.externalLinks.length ? glData.externalLinks : DEFAULT_LINKS;
-
-  if (!list.length) {
-    ul.innerHTML = '<li style="color:var(--text-secondary);font-size:0.85rem;">No links yet.</li>';
-    return;
-  }
-
-  ul.innerHTML = list.map((item, idx) => `
-    <li class="gl-resource-row">
-      <span style="font-size:0.88rem;">${escHtml(item.title)}</span>
-      <span class="admin-row-btns">
-        <button class="admin-inline-btn edit-btn" onclick="settingsGLEditLink(${idx})">Edit</button>
-        <button class="admin-inline-btn" onclick="settingsGLDeleteLink(${idx})">✕</button>
-      </span>
-    </li>
-  `).join('');
-}
-
-function settingsGLAddLink() {
-  if (!authManager.isAdmin()) return;
-  _openLinkModal({
-    title: 'Add Useful Link',
-    item: { title: '', url: '' },
-    onSubmit: async (item) => {
-      const base = glData.externalLinks.length ? [...glData.externalLinks] : [...DEFAULT_LINKS];
-      base.push(item);
-      await saveGLData({ externalLinks: base });
-      renderSettingsGLLinks();
-      if (currentPage === 'university') displayGLUniversity();
-    }
-  });
-}
-
-function settingsGLEditLink(idx) {
-  if (!authManager.isAdmin()) return;
-  const list = glData.externalLinks.length ? glData.externalLinks : DEFAULT_LINKS;
-  _openLinkModal({
-    title: 'Edit Useful Link',
-    item: list[idx],
-    submitLabel: 'Save Changes',
-    onSubmit: async (item) => {
-      const updated = glData.externalLinks.length ? [...glData.externalLinks] : [...DEFAULT_LINKS];
-      updated[idx] = item;
-      await saveGLData({ externalLinks: updated });
-      renderSettingsGLLinks();
-      if (currentPage === 'university') displayGLUniversity();
-    }
-  });
-}
-
-async function settingsGLDeleteLink(idx) {
-  if (!authManager.isAdmin()) return;
-  if (!confirm('Remove this link?')) return;
-  const list = glData.externalLinks.length ? [...glData.externalLinks] : [...DEFAULT_LINKS];
-  list.splice(idx, 1);
-  await saveGLData({ externalLinks: list });
-  renderSettingsGLLinks();
-  if (currentPage === 'university') displayGLUniversity();
 }
 
 // ─── Admin: Course CRUD ────────────────────────────────────────────────────────
@@ -1216,6 +1055,10 @@ function _openCourseModal({ title, course, icons, submitLabel = 'Save Course', o
                  placeholder="8 Lessons" value="${escAttr(course.lessons || '')}">
         </div>
         <div class="form-group" style="margin-top:1rem;">
+          <label>Start Learning Link (Discord / URL)</label>
+          <input type="url" id="gc-link" class="setting-input" placeholder="https://discord.gg/..." value="${escAttr(course.link || '')}">
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
           <label>Level</label>
           <select id="gc-level" class="setting-input">
             ${['Beginner','Intermediate','Advanced','All Levels'].map(l =>
@@ -1248,6 +1091,7 @@ function _openCourseModal({ title, course, icons, submitLabel = 'Save Course', o
         title:       document.getElementById('gc-title').value.trim(),
         description: document.getElementById('gc-desc').value.trim(),
         lessons:     document.getElementById('gc-lessons').value.trim(),
+        link:        document.getElementById('gc-link').value.trim(),
         level:       document.getElementById('gc-level').value
       });
       close();
@@ -1471,12 +1315,17 @@ async function saveGLData(partial) {
   if (partial.readingList   !== undefined) glData.readingList   = partial.readingList;
   if (partial.externalLinks !== undefined) glData.externalLinks = partial.externalLinks;
 
-  await db.collection('global').doc('gl_university').set({
+  try {
+    await db.collection('global').doc('gl_university').set({
     courses:       glData.courses,
     readingList:   glData.readingList,
     externalLinks: glData.externalLinks,
     updatedAt:     firebase.firestore.FieldValue.serverTimestamp()
   });
+  } catch (err) {
+    console.error('saveGLData error:', err);
+    alert('GL University save failed. Check Firestore rules/permissions.');
+  }
 }
 
 // ─── Settings ──────────────────────────────────────────────────────────────────
