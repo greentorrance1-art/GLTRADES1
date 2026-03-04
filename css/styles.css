@@ -936,3 +936,7 @@ form {
     color: var(--primary-color);
     font-size: 0.8rem;
 }
+
+
+/* heatmap height match */
+#tv-advanced-chart, #tv-heatmap{height:420px;}
