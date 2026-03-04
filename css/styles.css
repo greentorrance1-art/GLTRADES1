@@ -239,6 +239,7 @@ body {
     padding: 1.5rem;
     border-radius: var(--radius);
     box-shadow: var(--shadow-md);
+    height: 350px;
 }
 
 .chart-container.large {
@@ -249,6 +250,11 @@ body {
     margin-bottom: 1rem;
     color: var(--text-primary);
     font-size: 1.25rem;
+}
+
+#equity-chart {
+    height: 100% !important;
+    width: 100% !important;
 }
 
 /* TradingView widgets */
@@ -268,6 +274,11 @@ body {
     border-radius: var(--radius);
     overflow: hidden;
     background: var(--surface);
+}
+
+#tv-heatmap {
+    height: 520px;
+    width: 100%;
 }
 
 .tv-watchlist {
@@ -993,24 +1004,3 @@ form {
 .form-grid{display:grid;grid-template-columns:repeat(3, minmax(0,1fr));gap:1rem;}
 @media (max-width: 900px){.form-grid{grid-template-columns:1fr;}}
 .checkbox-row{display:flex;gap:0.6rem;align-items:center;margin:0.5rem 0;}
-
-
-/* --- FIX: Market heatmap + chart equal height --- */
-.tv-widget{
-height:520px !important;
-min-height:520px !important;
-width:100%;
-}
-#tv-heatmap{
-height:520px !important;
-width:100%;
-}
-
-/* --- FIX: Equity curve stretch --- */
-.chart-container{
-height:350px;
-}
-#equity-chart{
-height:100% !important;
-width:100% !important;
-}
