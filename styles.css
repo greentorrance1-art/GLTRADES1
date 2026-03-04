@@ -272,6 +272,33 @@ body {
     border-radius: var(--radius);
     overflow: hidden;
     background: var(--surface);
+    position: relative;
+}
+
+.widget-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 30px;
+    height: 30px;
+    background: rgba(16, 185, 129, 0.8);
+    color: white;
+    cursor: ns-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    border-top-left-radius: 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s, background 0.2s;
+    z-index: 10;
+    user-select: none;
+}
+
+.widget-resize-handle:hover {
+    opacity: 1;
+    background: rgba(16, 185, 129, 1);
 }
 
 #tv-heatmap {
