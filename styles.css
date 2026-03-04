@@ -266,8 +266,8 @@ body {
 
 .tv-widget {
     flex: 1;
-    height: 520px;
-    min-height: 520px;
+    height: 700px;
+    min-height: 700px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
     overflow: hidden;
@@ -275,7 +275,7 @@ body {
 }
 
 #tv-heatmap {
-    height: 520px;
+    height: 700px;
     width: 100%;
 }
 
