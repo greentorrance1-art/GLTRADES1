@@ -8,6 +8,15 @@ window.trades = [];
 window.playbooks = [];
 window.journalEntries = [];
 
+// User-level settings document (users/{uid}.settings)
+window.userSettings = {};
+
+// Journal image staging (files selected before save)
+let pendingJournalImages = [];
+
+// TradingView market overview state
+let currentMarketSymbol = 'NASDAQ:AAPL';
+
 // ─── App Entry Point ──────────────────────────────────────────────────────────
 window.initializeApp = async function () {
   currentUser = authManager.getUserId();
@@ -20,6 +29,7 @@ window.initializeApp = async function () {
   setupJournalModal();
   setupSettingsButtons();
   setupRoleBasedUI();
+  setupMarketOverviewUI();
   updateDashboard();
   showPage('dashboard');
 };
@@ -28,14 +38,19 @@ window.initializeApp = async function () {
 async function loadAllData() {
   if (!currentUser) return;
   try {
-    const [tradesSnap, playbooksSnap, journalSnap] = await Promise.all([
-      db.collection('users').doc(currentUser).collection('trades').orderBy('date', 'desc').get(),
-      db.collection('users').doc(currentUser).collection('playbooks').get(),
-      db.collection('users').doc(currentUser).collection('journal').orderBy('date', 'desc').get()
+    const userDocRef = db.collection('users').doc(currentUser);
+    const [tradesSnap, playbooksSnap, journalSnap, userDoc] = await Promise.all([
+      userDocRef.collection('trades').orderBy('date', 'desc').get(),
+      userDocRef.collection('playbooks').get(),
+      userDocRef.collection('journal').orderBy('date', 'desc').get(),
+      userDocRef.get()
     ]);
     window.trades = tradesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     window.playbooks = playbooksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     window.journalEntries = journalSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Pull user settings (for Market Overview watchlist, etc.)
+    window.userSettings = (userDoc.exists && userDoc.data().settings) ? userDoc.data().settings : {};
   } catch (err) {
     console.error('Error loading data:', err);
   }
@@ -60,12 +75,20 @@ function showPage(page) {
   const target = document.getElementById(`${page}-page`);
   if (target) target.classList.add('active');
 
-  if (page === 'dashboard') updateDashboard();
+  if (page === 'dashboard') {
+    updateDashboard();
+    renderMarketOverviewWidgets();
+  }
   if (page === 'trades') displayTrades();
   if (page === 'reports') updateReport();
   if (page === 'playbooks') displayPlaybooks();
   if (page === 'journal') displayJournal();
   if (page === 'university') displayGLUniversity();
+  if (page === 'settings' && authManager.isAdmin()) {
+    injectSettingsGLShortcut();
+    refreshSettingsGLEditor();
+    injectMarketOverviewSettings();
+  }
 }
 
 // ─── Trade Modal ──────────────────────────────────────────────────────────────
@@ -253,9 +276,6 @@ function updateDashboard() {
   renderEquityChart(trades);
   renderWinLossChart(wins.length, losses.length, trades.filter(t => t.outcome === 'breakeven').length);
   renderRecentTrades(trades.slice(0, 10));
-
-  // Optional: free market widget
-  renderTradingViewMarketOverview();
 }
 
 function renderRecentTrades(trades) {
@@ -279,70 +299,6 @@ function renderRecentTrades(trades) {
   `).join('');
 }
 
-
-
-// ─── TradingView Widget (free) ─────────────────────────────────────────
-function renderTradingViewMarketOverview() {
-  const host = document.getElementById('tv-market-overview');
-  if (!host) return;
-  // Prevent duplicate widgets/scripts
-  if (host.dataset.loaded === '1') return;
-  host.dataset.loaded = '1';
-
-  const container = document.createElement('div');
-  container.className = 'tradingview-widget-container';
-  container.innerHTML = `
-    <div class="tradingview-widget-container__widget"></div>
-    <div class="tradingview-widget-copyright" style="display:none;"></div>
-  `;
-  host.appendChild(container);
-
-  const script = document.createElement('script');
-  script.type = 'text/javascript';
-  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js';
-  script.async = true;
-  script.innerHTML = JSON.stringify({
-    colorTheme: "dark",
-    dateRange: "12M",
-    showChart: true,
-    locale: "en",
-    largeChartUrl: "",
-    isTransparent: true,
-    showSymbolLogo: true,
-    showFloatingTooltip: true,
-    width: "100%",
-    height: "420",
-    plotLineColorGrowing: "rgba(16, 185, 129, 1)",
-    plotLineColorFalling: "rgba(239, 68, 68, 1)",
-    gridLineColor: "rgba(148, 163, 184, 0.06)",
-    scaleFontColor: "rgba(148, 163, 184, 1)",
-    belowLineFillColorGrowing: "rgba(16, 185, 129, 0.05)",
-    belowLineFillColorFalling: "rgba(239, 68, 68, 0.05)",
-    belowLineFillColorGrowingBottom: "rgba(16, 185, 129, 0.0)",
-    belowLineFillColorFallingBottom: "rgba(239, 68, 68, 0.0)",
-    symbolActiveColor: "rgba(148, 163, 184, 0.12)",
-    tabs: [
-      { title: "Indices", symbols: [
-        { s: "FOREXCOM:SPXUSD", d: "S&P 500" },
-        { s: "FOREXCOM:NSXUSD", d: "Nasdaq 100" },
-        { s: "FOREXCOM:DJI", d: "Dow 30" },
-        { s: "INDEX:RSI", d: "Russell 2000" }
-      ]},
-      { title: "Futures", symbols: [
-        { s: "CME_MINI:NQ1!", d: "Nasdaq 100" },
-        { s: "CME_MINI:ES1!", d: "S&P 500" },
-        { s: "CME_MINI:YM1!", d: "Dow 30" },
-        { s: "CME_MINI:RTY1!", d: "Russell 2000" }
-      ]},
-      { title: "Forex", symbols: [
-        { s: "FX:EURUSD", d: "EUR/USD" },
-        { s: "FX:GBPUSD", d: "GBP/USD" },
-        { s: "FX:USDJPY", d: "USD/JPY" }
-      ]}
-    ]
-  });
-  container.appendChild(script);
-}
 // ─── Trades Page ──────────────────────────────────────────────────────────────
 function displayTrades() {
   const search = (document.getElementById('trade-search')?.value || '').toLowerCase();
@@ -401,6 +357,111 @@ document.addEventListener('DOMContentLoaded', () => {
 let equityChartInstance = null;
 let winlossChartInstance = null;
 let reportChartInstance = null;
+
+// ─── TradingView Market Overview ───────────────────────────────────────────
+function setupMarketOverviewUI() {
+  // Default watchlist (can be overridden by user settings)
+  const symbols = getMarketOverviewSymbols();
+  if (symbols.length) currentMarketSymbol = symbols[0];
+
+  const watchEl = document.getElementById('tv-watchlist');
+  if (!watchEl) return;
+
+  watchEl.innerHTML = '';
+  symbols.forEach(sym => {
+    const btn = document.createElement('button');
+    btn.textContent = sym;
+    btn.className = sym === currentMarketSymbol ? 'active' : '';
+    btn.addEventListener('click', () => {
+      currentMarketSymbol = sym;
+      [...watchEl.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b.textContent === sym));
+      renderMarketOverviewWidgets();
+    });
+    watchEl.appendChild(btn);
+  });
+}
+
+function getMarketOverviewSymbols() {
+  // Stored as comma-separated string in user settings (admin can set their defaults)
+  const raw = (window.userSettings && window.userSettings.marketOverviewSymbols) ? window.userSettings.marketOverviewSymbols : '';
+  const parsed = raw
+    ? raw.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+
+  // Sensible defaults (heavy hitters + broad index + futures)
+  return parsed.length ? parsed : [
+    'NASDAQ:AAPL',
+    'NASDAQ:NVDA',
+    'NASDAQ:MSFT',
+    'NASDAQ:AMZN',
+    'NASDAQ:TSLA',
+    'NASDAQ:QQQ',
+    'SP:SPX',
+    'DJ:DJI',
+    'CME_MINI:NQ1!',
+    'CME_MINI:ES1!'
+  ];
+}
+
+function injectTradingViewWidget(containerId, scriptSrc, configObj) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = '';
+  const script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.async = true;
+  script.src = scriptSrc;
+  script.innerHTML = JSON.stringify(configObj);
+  el.appendChild(script);
+}
+
+function renderMarketOverviewWidgets() {
+  // Only render if dashboard containers exist
+  const chartEl = document.getElementById('tv-advanced-chart');
+  const heatEl  = document.getElementById('tv-heatmap');
+  if (!chartEl || !heatEl) return;
+
+  // Advanced Chart: full toolbar (candles, Heikin Ashi, indicators, intervals)
+  injectTradingViewWidget('tv-advanced-chart',
+    'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js',
+    {
+      autosize: true,
+      symbol: currentMarketSymbol,
+      interval: 'D',
+      timezone: 'America/New_York',
+      theme: 'dark',
+      style: '1',
+      locale: 'en',
+      allow_symbol_change: true,
+      hide_side_toolbar: false,
+      withdateranges: true,
+      watchlist: getMarketOverviewSymbols(),
+      details: true,
+      hotlist: false,
+      calendar: true,
+      support_host: 'https://www.tradingview.com'
+    }
+  );
+
+  // Heatmap
+  injectTradingViewWidget('tv-heatmap',
+    'https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js',
+    {
+      autosize: true,
+      exchange: 'US',
+      dataSource: 'SPX500',
+      grouping: 'sector',
+      blockSize: 'market_cap_basic',
+      blockColor: 'change',
+      locale: 'en',
+      colorTheme: 'dark',
+      hasTopBar: true,
+      isDataSetEnabled: true,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true
+    }
+  );
+}
 
 function renderEquityChart(trades) {
   const ctx = document.getElementById('equity-chart');
@@ -697,6 +758,8 @@ function setupJournalModal() {
   document.getElementById('add-journal-btn').addEventListener('click', () => {
     document.getElementById('journal-form').reset();
     document.getElementById('journal-date').value = new Date().toISOString().split('T')[0];
+    pendingJournalImages = [];
+    renderJournalImagePreview();
     document.getElementById('journal-modal').classList.add('active');
   });
   document.getElementById('close-journal-modal').addEventListener('click', () => {
@@ -713,6 +776,52 @@ function setupJournalModal() {
     e.preventDefault();
     await saveJournalEntry();
   });
+
+  setupJournalImageUploader();
+}
+
+function setupJournalImageUploader() {
+  const dropzone = document.getElementById('journal-dropzone');
+  const input = document.getElementById('journal-images');
+  if (!dropzone || !input) return;
+
+  // Click to open file picker
+  dropzone.addEventListener('click', () => input.click());
+
+  // File picker
+  input.addEventListener('change', (e) => {
+    const files = [...(e.target.files || [])].filter(f => f.type.startsWith('image/'));
+    pendingJournalImages = pendingJournalImages.concat(files);
+    renderJournalImagePreview();
+    input.value = '';
+  });
+
+  // Drag & drop
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    const files = [...(e.dataTransfer.files || [])].filter(f => f.type.startsWith('image/'));
+    pendingJournalImages = pendingJournalImages.concat(files);
+    renderJournalImagePreview();
+  });
+}
+
+function renderJournalImagePreview() {
+  const preview = document.getElementById('journal-image-preview');
+  if (!preview) return;
+  if (!pendingJournalImages.length) {
+    preview.innerHTML = '';
+    return;
+  }
+  preview.innerHTML = pendingJournalImages.map((file, idx) => {
+    const url = URL.createObjectURL(file);
+    return `<img class="thumb" src="${url}" alt="upload-${idx}" />`;
+  }).join('');
 }
 
 async function saveJournalEntry() {
@@ -725,10 +834,29 @@ async function saveJournalEntry() {
       title: document.getElementById('journal-title').value.trim(),
       entry: document.getElementById('journal-entry').value.trim(),
       mood: document.getElementById('journal-mood').value,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      images: []
     };
     const docRef = await db.collection('users').doc(currentUser).collection('journal').add(data);
-    window.journalEntries.unshift({ id: docRef.id, ...data });
+
+    // Upload images (if any) to Firebase Storage and store URLs in Firestore
+    let imageUrls = [];
+    if (pendingJournalImages.length) {
+      imageUrls = await Promise.all(
+        pendingJournalImages.map(async (file) => {
+          const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+          const path = `users/${currentUser}/journal/${docRef.id}/${safeName}`;
+          const ref = storage.ref(path);
+          await ref.put(file);
+          return await ref.getDownloadURL();
+        })
+      );
+      await docRef.update({ images: imageUrls });
+    }
+
+    window.journalEntries.unshift({ id: docRef.id, ...data, images: imageUrls });
+    pendingJournalImages = [];
+    renderJournalImagePreview();
     document.getElementById('journal-modal').classList.remove('active');
     displayJournal();
   } catch (err) {
@@ -769,21 +897,24 @@ function displayJournal() {
         <button class="btn btn-danger action-btn" onclick="deleteJournalEntry('${j.id}')">Delete</button>
       </div>
       <div class="journal-content">${j.entry || ''}</div>
+      ${(j.images && j.images.length) ? `
+        <div class="journal-images">
+          ${j.images.map(url => `<a href="${escAttr(url)}" target="_blank" rel="noopener"><img src="${escAttr(url)}" alt="journal-image" /></a>`).join('')}
+        </div>
+      ` : ''}
     </div>
   `).join('');
 }
 
 // ─── GL University ─────────────────────────────────────────────────────────────
 // ── These are the hardcoded defaults shown until admin saves custom content ──
-const DEFAULT_DISCORD_LINK = 'https://discord.gg/YOUR_INVITE';
-
 const DEFAULT_COURSES = [
-  { icon: '📊', title: 'Risk Management Fundamentals',  description: 'Learn the essential principles of position sizing, stop losses, and portfolio risk management.', lessons: '8 Lessons',  level: 'Beginner'     , link: '' },
-  { icon: '📈', title: 'Technical Analysis Mastery',    description: 'Master chart patterns, indicators, and price action trading strategies.',                          lessons: '12 Lessons', level: 'Intermediate' , link: '' },
-  { icon: '🧠', title: 'Trading Psychology',            description: 'Develop mental discipline, emotional control, and winning trading habits.',                         lessons: '10 Lessons', level: 'All Levels'   , link: '' },
-  { icon: '💰', title: 'Options Trading Strategies',    description: 'Understand options mechanics, spreads, and advanced trading strategies.',                           lessons: '15 Lessons', level: 'Advanced'     , link: '' },
-  { icon: '🎯', title: 'Building Trading Systems',      description: 'Create, backtest, and optimize profitable trading systems and strategies.',                         lessons: '10 Lessons', level: 'Advanced'     , link: '' },
-  { icon: '📉', title: 'Market Analysis & Research',   description: 'Develop skills in fundamental analysis, market research, and trade idea generation.',               lessons: '9 Lessons',  level: 'Intermediate' , link: '' }
+  { icon: '📊', title: 'Risk Management Fundamentals',  description: 'Learn the essential principles of position sizing, stop losses, and portfolio risk management.', lessons: '8 Lessons',  level: 'Beginner'     },
+  { icon: '📈', title: 'Technical Analysis Mastery',    description: 'Master chart patterns, indicators, and price action trading strategies.',                          lessons: '12 Lessons', level: 'Intermediate' },
+  { icon: '🧠', title: 'Trading Psychology',            description: 'Develop mental discipline, emotional control, and winning trading habits.',                         lessons: '10 Lessons', level: 'All Levels'   },
+  { icon: '💰', title: 'Options Trading Strategies',    description: 'Understand options mechanics, spreads, and advanced trading strategies.',                           lessons: '15 Lessons', level: 'Advanced'     },
+  { icon: '🎯', title: 'Building Trading Systems',      description: 'Create, backtest, and optimize profitable trading systems and strategies.',                         lessons: '10 Lessons', level: 'Advanced'     },
+  { icon: '📉', title: 'Market Analysis & Research',   description: 'Develop skills in fundamental analysis, market research, and trade idea generation.',               lessons: '9 Lessons',  level: 'Intermediate' }
 ];
 
 const DEFAULT_READING = [
@@ -847,7 +978,7 @@ async function displayGLUniversity() {
           <span>${escHtml(c.lessons || '')}</span>
           <span>${escHtml(c.level || '')}</span>
         </div>
-        <button class="btn btn-outline" onclick="openGLCourseLink(${idx})">Start Learning</button>
+        <button class="btn btn-outline">Start Learning</button>
         ${isAdmin ? `
           <div class="admin-course-actions">
             <button class="btn btn-secondary action-btn" onclick="openEditCourseModal(${idx})">Edit</button>
@@ -899,23 +1030,6 @@ async function displayGLUniversity() {
   }
 }
 
-
-
-// Open course link (Start Learning)
-function openGLCourseLink(idx) {
-  try {
-    const courses = (glData && glData.courses && glData.courses.length) ? glData.courses : DEFAULT_COURSES;
-    const c = courses[idx] || {};
-    const url = (c.link || c.url || '').trim() || DEFAULT_DISCORD_LINK;
-    if (!url) {
-      alert('No link set for this course yet.');
-      return;
-    }
-    window.open(url, '_blank', 'noopener');
-  } catch (e) {
-    console.error('openGLCourseLink error:', e);
-  }
-}
 // ─── Admin Panel ──────────────────────────────────────────────────────────────
 // setupRoleBasedUI is called from initializeApp AFTER userRole is loaded.
 // It injects the admin panel into the university page DOM and marks it visible.
@@ -1055,10 +1169,6 @@ function _openCourseModal({ title, course, icons, submitLabel = 'Save Course', o
                  placeholder="8 Lessons" value="${escAttr(course.lessons || '')}">
         </div>
         <div class="form-group" style="margin-top:1rem;">
-          <label>Start Learning Link (Discord / URL)</label>
-          <input type="url" id="gc-link" class="setting-input" placeholder="https://discord.gg/..." value="${escAttr(course.link || '')}">
-        </div>
-        <div class="form-group" style="margin-top:1rem;">
           <label>Level</label>
           <select id="gc-level" class="setting-input">
             ${['Beginner','Intermediate','Advanced','All Levels'].map(l =>
@@ -1091,7 +1201,6 @@ function _openCourseModal({ title, course, icons, submitLabel = 'Save Course', o
         title:       document.getElementById('gc-title').value.trim(),
         description: document.getElementById('gc-desc').value.trim(),
         lessons:     document.getElementById('gc-lessons').value.trim(),
-        link:        document.getElementById('gc-link').value.trim(),
         level:       document.getElementById('gc-level').value
       });
       close();
@@ -1315,21 +1424,49 @@ async function saveGLData(partial) {
   if (partial.readingList   !== undefined) glData.readingList   = partial.readingList;
   if (partial.externalLinks !== undefined) glData.externalLinks = partial.externalLinks;
 
-  try {
-    await db.collection('global').doc('gl_university').set({
+  await db.collection('global').doc('gl_university').set({
     courses:       glData.courses,
     readingList:   glData.readingList,
     externalLinks: glData.externalLinks,
     updatedAt:     firebase.firestore.FieldValue.serverTimestamp()
   });
-  } catch (err) {
-    console.error('saveGLData error:', err);
-    alert('GL University save failed. Check Firestore rules/permissions.');
-  }
 }
 
 // ─── Settings ──────────────────────────────────────────────────────────────────
+function injectMarketOverviewSettings() {
+  if (!authManager.isAdmin()) return;
+  if (document.getElementById('market-overview-settings')) return;
+
+  const settingsContainer = document.querySelector('#settings-page .settings-container');
+  if (!settingsContainer) return;
+
+  const section = document.createElement('div');
+  section.id = 'market-overview-settings';
+  section.className = 'settings-section admin-panel-box';
+  section.innerHTML = `
+    <h3 style="color:var(--primary-color);margin-bottom:0.5rem;">Market Overview — Watchlist</h3>
+    <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+      Comma-separated TradingView symbols. Example: NASDAQ:AAPL, NASDAQ:NVDA, CME_MINI:NQ1!
+    </p>
+    <input id="setting-market-symbols" class="setting-input" type="text"
+           placeholder="NASDAQ:AAPL, NASDAQ:NVDA, NASDAQ:MSFT, NASDAQ:QQQ, CME_MINI:NQ1!">
+  `;
+
+  // Insert near the top of settings (after the first section if possible)
+  const firstSection = settingsContainer.querySelector('.settings-section');
+  if (firstSection) firstSection.insertAdjacentElement('afterend', section);
+  else settingsContainer.prepend(section);
+
+  const input = document.getElementById('setting-market-symbols');
+  if (input) {
+    input.value = window.userSettings.marketOverviewSymbols || getMarketOverviewSymbols().join(', ');
+  }
+}
+
 function setupSettingsButtons() {
+  // Inject Market Overview settings (admin only)
+  injectMarketOverviewSettings();
+
   const saveBtn = document.getElementById('save-settings-btn');
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
@@ -1341,9 +1478,19 @@ function setupSettingsButtons() {
           currency:           document.getElementById('setting-currency').value,
           brandColor:         document.getElementById('setting-brand-color').value,
           educationalEnabled: document.getElementById('setting-educational').checked,
-          sampleData:         document.getElementById('setting-sample-data').checked
+          sampleData:         document.getElementById('setting-sample-data').checked,
+          // Market overview watchlist (comma-separated TradingView symbols)
+          marketOverviewSymbols: document.getElementById('setting-market-symbols')
+            ? document.getElementById('setting-market-symbols').value
+            : (window.userSettings.marketOverviewSymbols || '')
         };
         await db.collection('users').doc(currentUser).set({ settings }, { merge: true });
+
+        // Keep local copy in sync
+        window.userSettings = settings;
+        setupMarketOverviewUI();
+        if (currentPage === 'dashboard') renderMarketOverviewWidgets();
+
         document.documentElement.style.setProperty('--primary-color', settings.brandColor);
         alert('Settings saved!');
       } catch (err) {
