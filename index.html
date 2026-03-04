@@ -74,6 +74,7 @@
 
             <!-- Market Overview (TradingView Widgets) -->
             <div class="section">
+                <div id="tradingview-ticker"></div>
                 <h3>Market Overview</h3>
                 <div id="tv-watchlist" class="tv-watchlist"></div>
                 <div class="tv-widgets">
@@ -458,5 +459,23 @@
 
     <!-- Main App (loaded after auth check) -->
     <script src="js/app.js"></script>
+
+<script src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+{
+ "symbols": [
+  {"proName": "NASDAQ:SPY","title":"SPY"},
+  {"proName": "NASDAQ:QQQ","title":"QQQ"},
+  {"proName": "NASDAQ:NVDA","title":"NVDA"},
+  {"proName": "NASDAQ:AAPL","title":"AAPL"},
+  {"proName": "NASDAQ:TSLA","title":"TSLA"},
+  {"proName": "BITSTAMP:BTCUSD","title":"BTC"}
+ ],
+ "showSymbolLogo": true,
+ "colorTheme": "light",
+ "isTransparent": false,
+ "displayMode": "adaptive"
+}
+</script>
+
 </body>
 </html>
