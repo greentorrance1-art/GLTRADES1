@@ -395,21 +395,7 @@ function setupMarketOverviewUI() {
   const symbols = getMarketOverviewSymbols();
   if (symbols.length) currentMarketSymbol = symbols[0];
 
-  const watchEl = document.getElementById('tv-watchlist');
-  if (!watchEl) return;
-
-  watchEl.innerHTML = '';
-  symbols.forEach(sym => {
-    const btn = document.createElement('button');
-    btn.textContent = sym;
-    btn.className = sym === currentMarketSymbol ? 'active' : '';
-    btn.addEventListener('click', () => {
-      currentMarketSymbol = sym;
-      [...watchEl.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b.textContent === sym));
-      renderMarketOverviewWidgets();
-    });
-    watchEl.appendChild(btn);
-  });
+  // Symbol tabs removed - chart now uses allow_symbol_change: true for inline symbol selection
 }
 
 function getMarketOverviewSymbols() {
