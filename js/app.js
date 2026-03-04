@@ -8,11 +8,17 @@ window.trades = [];
 window.playbooks = [];
 window.journalEntries = [];
 
+// Journal image upload (client-side)
+let journalImageFiles = [];
+
 // User-level settings document (users/{uid}.settings)
 window.userSettings = {};
 
 // Journal image staging (files selected before save)
 let pendingJournalImages = [];
+
+// Journal images (current implementation uses this array)
+let journalImageFiles = [];
 
 // TradingView market overview state
 let currentMarketSymbol = 'NASDAQ:AAPL';
@@ -20,7 +26,10 @@ let currentMarketSymbol = 'NASDAQ:AAPL';
 // ─── App Entry Point ──────────────────────────────────────────────────────────
 window.initializeApp = async function () {
   currentUser = authManager.getUserId();
-  userRole = authManager.userRole;
+
+  // Ensure role + settings are loaded before building role-based UI
+  userRole = await ensureUserRoleLoaded();
+  await loadUserSettings();
 
   await loadAllData();
   setupNavigation();
@@ -29,7 +38,10 @@ window.initializeApp = async function () {
   setupJournalModal();
   setupSettingsButtons();
   setupRoleBasedUI();
-  setupMarketOverviewUI();
+
+  // Build TradingView widgets on dashboard
+  initMarketOverview();
+
   updateDashboard();
   showPage('dashboard');
 };
@@ -53,6 +65,39 @@ async function loadAllData() {
     window.userSettings = (userDoc.exists && userDoc.data().settings) ? userDoc.data().settings : {};
   } catch (err) {
     console.error('Error loading data:', err);
+  }
+}
+
+
+// ─── User Settings / Role bootstrap ───────────────────────────────────────────
+async function ensureUserRoleLoaded() {
+  // Prefer authManager role if available; otherwise read from Firestore user doc
+  if (authManager && typeof authManager.userRole !== 'undefined' && authManager.userRole) {
+    return authManager.userRole;
+  }
+  if (!currentUser) return null;
+  try {
+    const snap = await db.collection('users').doc(currentUser).get();
+    const role = snap.exists ? (snap.data().role || snap.data().userRole || null) : null;
+    if (authManager && role) authManager.userRole = role;
+    return role;
+  } catch (e) {
+    console.warn('Role load fallback failed:', e);
+    return null;
+  }
+}
+
+async function loadUserSettings() {
+  if (!currentUser) return {};
+  try {
+    const snap = await db.collection('users').doc(currentUser).get();
+    const s = snap.exists ? (snap.data().settings || {}) : {};
+    window.userSettings = s;
+    return s;
+  } catch (e) {
+    console.warn('Settings load failed:', e);
+    window.userSettings = {};
+    return {};
   }
 }
 
@@ -362,44 +407,53 @@ let reportChartInstance = null;
 function setupMarketOverviewUI() {
   // Default watchlist (can be overridden by user settings)
   const symbols = getMarketOverviewSymbols();
-  if (symbols.length) currentMarketSymbol = symbols[0];
+  if (symbols.length && !currentMarketSymbol) currentMarketSymbol = symbols[0];
 
   const watchEl = document.getElementById('tv-watchlist');
   if (!watchEl) return;
 
-  watchEl.innerHTML = '';
-  symbols.forEach(sym => {
-    const btn = document.createElement('button');
-    btn.textContent = sym;
-    btn.className = sym === currentMarketSymbol ? 'active' : '';
-    btn.addEventListener('click', () => {
-      currentMarketSymbol = sym;
-      [...watchEl.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b.textContent === sym));
-      renderMarketOverviewWidgets();
-    });
-    watchEl.appendChild(btn);
-  });
+  // Investopedia-style ticker tape (TradingView widget)
+  // Ticker tape doesn't provide a reliable click callback to drive the chart.
+  // The Advanced Chart below still supports symbol switching + has a built-in watchlist.
+  const tvSymbols = symbols.map(s => ({ proName: s, title: s }));
+
+  injectTradingViewWidget('tv-watchlist',
+    'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js',
+    {
+      symbols: tvSymbols,
+      showSymbolLogo: true,
+      colorTheme: 'dark',
+      isTransparent: true,
+      displayMode: 'adaptive',
+      locale: 'en'
+    }
+  );
 }
 
 function getMarketOverviewSymbols() {
   // Stored as comma-separated string in user settings (admin can set their defaults)
   const raw = (window.userSettings && window.userSettings.marketOverviewSymbols) ? window.userSettings.marketOverviewSymbols : '';
   const parsed = raw
-    ? raw.split(',').map(s => s.trim()).filter(Boolean)
+    ? raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
     : [];
 
   // Sensible defaults (heavy hitters + broad index + futures)
   return parsed.length ? parsed : [
+    'AMEX:SPY',
+    'NASDAQ:QQQ',
+    'AMEX:DIA',
+    'AMEX:IWM',
     'NASDAQ:AAPL',
     'NASDAQ:NVDA',
     'NASDAQ:MSFT',
     'NASDAQ:AMZN',
     'NASDAQ:TSLA',
-    'NASDAQ:QQQ',
-    'SP:SPX',
-    'DJ:DJI',
+    'CME_MINI:ES1!',
     'CME_MINI:NQ1!',
-    'CME_MINI:ES1!'
+    'CME_MINI:MNQ1!',
+    'TVC:GOLD',
+    'FX:EURUSD',
+    'CRYPTO:BTCUSD'
   ];
 }
 
@@ -755,113 +809,132 @@ function displayPlaybooks() {
 
 // ─── Journal ──────────────────────────────────────────────────────────────────
 function setupJournalModal() {
-  document.getElementById('add-journal-btn').addEventListener('click', () => {
-    document.getElementById('journal-form').reset();
+  const modal = document.getElementById('journal-modal');
+  const form = document.getElementById('journal-form');
+  const addBtn = document.getElementById('add-journal-btn');
+
+  const dropzone = document.getElementById('journal-dropzone');
+  const fileInput = document.getElementById('journal-images');
+  const previews = document.getElementById('journal-image-preview');
+  const entryField = document.getElementById('journal-entry');
+
+  const resetImages = () => {
+    journalImageFiles = [];
+    if (fileInput) fileInput.value = '';
+    if (previews) previews.innerHTML = '';
+  };
+
+  const renderPreviews = () => {
+    if (!previews) return;
+    previews.innerHTML = '';
+    journalImageFiles.forEach((file, idx) => {
+      const url = URL.createObjectURL(file);
+      const wrap = document.createElement('div');
+      wrap.className = 'preview-thumb';
+      wrap.innerHTML = `<img src="${url}" alt="Screenshot ${idx + 1}"><button type="button" class="preview-remove" title="Remove">×</button>`;
+      wrap.querySelector('button').addEventListener('click', () => {
+        journalImageFiles.splice(idx, 1);
+        renderPreviews();
+      });
+      previews.appendChild(wrap);
+    });
+  };
+
+  const addFiles = (files) => {
+    const list = Array.from(files || []).filter(f => f && f.type && f.type.startsWith('image/'));
+    if (!list.length) return;
+    journalImageFiles = [...journalImageFiles, ...list].slice(0, 6);
+    renderPreviews();
+  };
+
+  addBtn?.addEventListener('click', () => {
+    form.reset();
     document.getElementById('journal-date').value = new Date().toISOString().split('T')[0];
-    pendingJournalImages = [];
-    renderJournalImagePreview();
-    document.getElementById('journal-modal').classList.add('active');
+    resetImages();
+    modal.classList.add('active');
   });
-  document.getElementById('close-journal-modal').addEventListener('click', () => {
-    document.getElementById('journal-modal').classList.remove('active');
-  });
-  document.getElementById('cancel-journal-btn').addEventListener('click', () => {
-    document.getElementById('journal-modal').classList.remove('active');
-  });
-  document.getElementById('journal-modal').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('journal-modal'))
-      document.getElementById('journal-modal').classList.remove('active');
-  });
-  document.getElementById('journal-form').addEventListener('submit', async (e) => {
+
+  document.getElementById('close-journal-modal')?.addEventListener('click', () => { modal.classList.remove('active'); resetImages(); });
+  document.getElementById('cancel-journal-btn')?.addEventListener('click', () => { modal.classList.remove('active'); resetImages(); });
+  modal?.addEventListener('click', (e) => { if (e.target === modal) { modal.classList.remove('active'); resetImages(); } });
+
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => { e.preventDefault(); dropzone.classList.remove('dragover'); addFiles(e.dataTransfer.files); });
+    fileInput.addEventListener('change', (e) => addFiles(e.target.files));
+  }
+
+  // Prevent browsers from inserting a file path/link into the textarea on drop.
+  // Instead, treat drops as image uploads.
+  if (entryField) {
+    entryField.addEventListener('dragover', (e) => e.preventDefault());
+    entryField.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files);
+    });
+  }
+
+  form?.addEventListener('submit', async (e) => {
     e.preventDefault();
     await saveJournalEntry();
   });
-
-  setupJournalImageUploader();
 }
 
-function setupJournalImageUploader() {
-  const dropzone = document.getElementById('journal-dropzone');
-  const input = document.getElementById('journal-images');
-  if (!dropzone || !input) return;
+async function uploadJournalImages(files) {
+  if (!files || !files.length) return [];
+  if (!currentUser) return [];
+  if (!firebase || !firebase.storage) return [];
 
-  // Click to open file picker
-  dropzone.addEventListener('click', () => input.click());
+  const storage = firebase.storage();
 
-  // File picker
-  input.addEventListener('change', (e) => {
-    const files = [...(e.target.files || [])].filter(f => f.type.startsWith('image/'));
-    pendingJournalImages = pendingJournalImages.concat(files);
-    renderJournalImagePreview();
-    input.value = '';
+  const uploads = files.map(async (file) => {
+    const safeName = (file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `users/${currentUser}/journal/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
+    const ref = storage.ref().child(path);
+
+    const uploadPromise = ref.put(file).then(snap => snap.ref.getDownloadURL());
+    const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('Upload timeout')), 30000));
+    return Promise.race([uploadPromise, timeoutPromise]);
   });
 
-  // Drag & drop
-  dropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropzone.classList.add('dragover');
-  });
-  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-  dropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropzone.classList.remove('dragover');
-    const files = [...(e.dataTransfer.files || [])].filter(f => f.type.startsWith('image/'));
-    pendingJournalImages = pendingJournalImages.concat(files);
-    renderJournalImagePreview();
-  });
-}
-
-function renderJournalImagePreview() {
-  const preview = document.getElementById('journal-image-preview');
-  if (!preview) return;
-  if (!pendingJournalImages.length) {
-    preview.innerHTML = '';
-    return;
-  }
-  preview.innerHTML = pendingJournalImages.map((file, idx) => {
-    const url = URL.createObjectURL(file);
-    return `<img class="thumb" src="${url}" alt="upload-${idx}" />`;
-  }).join('');
+  return Promise.all(uploads);
 }
 
 async function saveJournalEntry() {
   const submitBtn = document.querySelector('#journal-form button[type="submit"]');
+  if (!submitBtn) return;
+
   submitBtn.disabled = true;
   submitBtn.textContent = 'Saving...';
+
   try {
+    if (!currentUser) throw new Error('Not signed in');
+
+    const images = await uploadJournalImages(journalImageFiles);
+
     const data = {
       date: document.getElementById('journal-date').value,
       title: document.getElementById('journal-title').value.trim(),
       entry: document.getElementById('journal-entry').value.trim(),
       mood: document.getElementById('journal-mood').value,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      images: []
+      images,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
+
     const docRef = await db.collection('users').doc(currentUser).collection('journal').add(data);
+    window.journalEntries.unshift({ id: docRef.id, ...data });
 
-    // Upload images (if any) to Firebase Storage and store URLs in Firestore
-    let imageUrls = [];
-    if (pendingJournalImages.length) {
-      imageUrls = await Promise.all(
-        pendingJournalImages.map(async (file) => {
-          const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-          const path = `users/${currentUser}/journal/${docRef.id}/${safeName}`;
-          const ref = storage.ref(path);
-          await ref.put(file);
-          return await ref.getDownloadURL();
-        })
-      );
-      await docRef.update({ images: imageUrls });
-    }
-
-    window.journalEntries.unshift({ id: docRef.id, ...data, images: imageUrls });
-    pendingJournalImages = [];
-    renderJournalImagePreview();
     document.getElementById('journal-modal').classList.remove('active');
+    journalImageFiles = [];
+    const previews = document.getElementById('journal-image-preview');
+    if (previews) previews.innerHTML = '';
+
     displayJournal();
   } catch (err) {
     console.error('Error saving journal entry:', err);
-    alert('Error saving journal entry.');
+    alert('Error saving entry. Please try again.');
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = 'Save Entry';
@@ -886,7 +959,11 @@ function displayJournal() {
     container.innerHTML = '<div style="color:var(--text-secondary);padding:2rem;">No journal entries yet. Click "+ New Entry" to start journaling.</div>';
     return;
   }
-  container.innerHTML = window.journalEntries.map(j => `
+  container.innerHTML = window.journalEntries.map(j => {
+    const imgs = Array.isArray(j.images) && j.images.length
+      ? j.images
+      : (Array.isArray(j.screenshots) ? j.screenshots : []);
+    return `
     <div class="journal-card">
       <div class="journal-header">
         <div>
@@ -897,13 +974,14 @@ function displayJournal() {
         <button class="btn btn-danger action-btn" onclick="deleteJournalEntry('${j.id}')">Delete</button>
       </div>
       <div class="journal-content">${j.entry || ''}</div>
-      ${(j.images && j.images.length) ? `
+      ${(imgs && imgs.length) ? `
         <div class="journal-images">
-          ${j.images.map(url => `<a href="${escAttr(url)}" target="_blank" rel="noopener"><img src="${escAttr(url)}" alt="journal-image" /></a>`).join('')}
+          ${imgs.map(url => `<a href="${escAttr(url)}" target="_blank" rel="noopener"><img src="${escAttr(url)}" alt="journal-image" /></a>`).join('')}
         </div>
       ` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // ─── GL University ─────────────────────────────────────────────────────────────
@@ -992,11 +1070,10 @@ async function displayGLUniversity() {
   const readingEl = document.getElementById('reading-list');
   if (readingEl) {
     const list = glData.readingList.length ? glData.readingList : DEFAULT_READING;
-    const usingDefaults = !glData.readingList.length;
     readingEl.innerHTML = list.map((item, idx) => `
       <li class="gl-resource-row">
         <span>${escHtml(item.title)}${item.author ? ' — ' + escHtml(item.author) : ''}</span>
-        ${isAdmin && !usingDefaults ? `
+        ${isAdmin ? `
           <span class="admin-row-btns">
             <button class="admin-inline-btn edit-btn" onclick="openEditReadingModal(${idx})">Edit</button>
             <button class="admin-inline-btn"          onclick="deleteReadingItem(${idx})">✕</button>
@@ -1009,11 +1086,10 @@ async function displayGLUniversity() {
   const linksEl = document.getElementById('external-links');
   if (linksEl) {
     const list = glData.externalLinks.length ? glData.externalLinks : DEFAULT_LINKS;
-    const usingDefaults = !glData.externalLinks.length;
     linksEl.innerHTML = list.map((item, idx) => `
       <li class="gl-resource-row">
         <a href="${escAttr(item.url)}" target="_blank" rel="noopener">${escHtml(item.title)}</a>
-        ${isAdmin && !usingDefaults ? `
+        ${isAdmin ? `
           <span class="admin-row-btns">
             <button class="admin-inline-btn edit-btn" onclick="openEditLinkModal(${idx})">Edit</button>
             <button class="admin-inline-btn"          onclick="deleteLinkItem(${idx})">✕</button>
@@ -1245,7 +1321,7 @@ function openEditReadingModal(idx) {
     item: list[idx],
     submitLabel: 'Save Changes',
     onSubmit: async (item) => {
-      const updated = [...glData.readingList];
+      const updated = glData.readingList.length ? [...glData.readingList] : [...DEFAULT_READING];
       updated[idx] = item;
       await saveGLData({ readingList: updated });
       displayGLUniversity();
@@ -1312,7 +1388,7 @@ function _openReadingModal({ title, item, submitLabel = 'Add', onSubmit }) {
 async function deleteReadingItem(idx) {
   if (!authManager.isAdmin()) return;
   if (!confirm('Remove this reading item?')) return;
-  const list = [...glData.readingList];
+  const list = glData.readingList.length ? [...glData.readingList] : [...DEFAULT_READING];
   list.splice(idx, 1);
   await saveGLData({ readingList: list });
   displayGLUniversity();
@@ -1341,7 +1417,7 @@ function openEditLinkModal(idx) {
     item: list[idx],
     submitLabel: 'Save Changes',
     onSubmit: async (item) => {
-      const updated = [...glData.externalLinks];
+      const updated = glData.externalLinks.length ? [...glData.externalLinks] : [...DEFAULT_LINKS];
       updated[idx] = item;
       await saveGLData({ externalLinks: updated });
       displayGLUniversity();
@@ -1408,7 +1484,7 @@ function _openLinkModal({ title, item, submitLabel = 'Add', onSubmit }) {
 async function deleteLinkItem(idx) {
   if (!authManager.isAdmin()) return;
   if (!confirm('Remove this link?')) return;
-  const list = [...glData.externalLinks];
+  const list = glData.externalLinks.length ? [...glData.externalLinks] : [...DEFAULT_LINKS];
   list.splice(idx, 1);
   await saveGLData({ externalLinks: list });
   displayGLUniversity();
@@ -1474,15 +1550,15 @@ function setupSettingsButtons() {
       saveBtn.textContent = 'Saving...';
       try {
         const settings = {
-          platformName:       document.getElementById('setting-platform-name').value,
-          currency:           document.getElementById('setting-currency').value,
-          brandColor:         document.getElementById('setting-brand-color').value,
-          educationalEnabled: document.getElementById('setting-educational').checked,
-          sampleData:         document.getElementById('setting-sample-data').checked,
-          // Market overview watchlist (comma-separated TradingView symbols)
-          marketOverviewSymbols: document.getElementById('setting-market-symbols')
-            ? document.getElementById('setting-market-symbols').value
-            : (window.userSettings.marketOverviewSymbols || '')
+          platformName:       document.getElementById('setting-platform-name')?.value || 'GLTRADES',
+          currency:           document.getElementById('setting-currency')?.value || 'USD',
+          brandColor:         document.getElementById('setting-brand-color')?.value || '#10b981',
+          educationalEnabled: document.getElementById('setting-educational')?.checked || false,
+          sampleData:         document.getElementById('setting-sample-data')?.checked || false,
+
+          // Market Overview
+          // Stored as a string so admins can easily edit (comma or newline separated)
+          marketOverviewSymbols: (document.getElementById('setting-market-symbols')?.value || '').trim()
         };
         await db.collection('users').doc(currentUser).set({ settings }, { merge: true });
 
