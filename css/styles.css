@@ -251,6 +251,87 @@ body {
     font-size: 1.25rem;
 }
 
+/* TradingView widgets */
+.tv-widgets {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+    margin-top: 0.75rem;
+}
+
+.tv-widget {
+    width: 100%;
+    min-height: 420px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+}
+
+.tv-watchlist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.tv-watchlist button {
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.tv-watchlist button.active {
+    border-color: var(--primary-color);
+}
+
+@media (max-width: 900px) {
+    .tv-widgets {
+        grid-template-columns: 1fr;
+    }
+    .tv-widget {
+        min-height: 380px;
+    }
+}
+
+/* Journal image upload */
+.dropzone {
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius);
+    padding: 1rem;
+    cursor: pointer;
+    user-select: none;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.dropzone.dragover {
+    border-color: var(--primary-color);
+}
+
+.dropzone-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.image-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.image-preview .thumb {
+    width: 90px;
+    height: 90px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    object-fit: cover;
+}
+
 /* Tables */
 .section {
     background-color: var(--surface);
@@ -572,6 +653,19 @@ form {
     white-space: pre-wrap;
 }
 
+.journal-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.journal-images img {
+    max-width: 180px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+
 /* University */
 .university-grid {
     display: grid;
@@ -820,4 +914,25 @@ form {
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 1.5rem;
     margin-bottom: 2rem;
+}
+
+/* ── Resource row layout (reading list & links with inline admin buttons) ─── */
+.gl-resource-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+}
+
+.admin-row-btns {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+.admin-inline-btn.edit-btn {
+    color: var(--primary-color);
+    font-size: 0.8rem;
 }
