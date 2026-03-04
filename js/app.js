@@ -1,3 +1,16 @@
+
+async function uploadJournalImages(entryId){
+  if(!pendingJournalImages.length) return [];
+  const urls=[];
+  for(const file of pendingJournalImages){
+    const ref=storage.ref().child(`journalImages/${currentUser}/${entryId}/${file.name}`);
+    await ref.put(file);
+    urls.push(await ref.getDownloadURL());
+  }
+  pendingJournalImages=[];
+  return urls;
+}
+
 // ─── Global State ────────────────────────────────────────────────────────────
 let currentPage = 'dashboard';
 let currentUser = null;
