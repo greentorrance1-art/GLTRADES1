@@ -110,6 +110,11 @@ function showPage(page) {
   if (page === 'dashboard') {
     updateDashboard();
     renderMarketOverviewWidgets();
+    // Apply saved widget height
+    const savedHeight = window.userSettings.widgetHeight || 700;
+    applyWidgetHeight(savedHeight);
+    // Setup resize handles
+    setupWidgetResizeHandles();
   }
   if (page === 'trades') displayTrades();
   if (page === 'reports') updateReport();
@@ -502,6 +507,67 @@ function renderMarketOverviewWidgets() {
       hasSymbolTooltip: true
     }
   );
+}
+
+// ─── Widget Resize Handles ────────────────────────────────────────────────────
+function setupWidgetResizeHandles() {
+  const handles = document.querySelectorAll('.widget-resize-handle');
+
+  handles.forEach(handle => {
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+    let widget = null;
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isResizing = true;
+      startY = e.clientY;
+
+      const widgetId = handle.getAttribute('data-widget');
+      widget = document.getElementById(widgetId);
+      startHeight = widget.offsetHeight;
+
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing || !widget) return;
+
+      const deltaY = e.clientY - startY;
+      const newHeight = Math.max(400, Math.min(1200, startHeight + deltaY));
+
+      widget.style.height = newHeight + 'px';
+      widget.style.minHeight = newHeight + 'px';
+
+      // Update display text on handle
+      handle.setAttribute('title', `${newHeight}px`);
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing && widget) {
+        isResizing = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+
+        // Save the new height
+        const finalHeight = widget.offsetHeight;
+        if (window.userSettings) {
+          window.userSettings.widgetHeight = finalHeight;
+          // Optionally save to Firestore
+          if (currentUser) {
+            db.collection('users').doc(currentUser).set(
+              { settings: { widgetHeight: finalHeight } },
+              { merge: true }
+            ).catch(err => console.error('Error saving widget height:', err));
+          }
+        }
+
+        widget = null;
+      }
+    });
+  });
 }
 
 function renderEquityChart(trades) {
@@ -1525,7 +1591,75 @@ function injectMarketOverviewSettings() {
   }
 }
 
+// ─── Widget Size Controls ─────────────────────────────────────────────────────
+function injectWidgetSizeControls() {
+  if (document.getElementById('widget-size-controls')) return;
+
+  const settingsContainer = document.querySelector('#settings-page .settings-container');
+  if (!settingsContainer) return;
+
+  const section = document.createElement('div');
+  section.id = 'widget-size-controls';
+  section.className = 'settings-section';
+  section.innerHTML = `
+    <h3>TradingView Widget Size</h3>
+    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+      Adjust the height of your TradingView chart and heatmap widgets. Changes apply immediately.
+    </p>
+    <div style="margin-bottom:1.5rem;">
+      <label style="display:block;margin-bottom:0.5rem;font-weight:500;">Widget Height: <span id="widget-height-value">700</span>px</label>
+      <input type="range" id="widget-height-slider" class="widget-size-slider"
+             min="400" max="1000" step="50" value="700"
+             style="width:100%;height:8px;background:#e5e7eb;border-radius:5px;outline:none;cursor:pointer;">
+      <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--text-secondary);margin-top:0.25rem;">
+        <span>400px (Compact)</span>
+        <span>1000px (Full Height)</span>
+      </div>
+    </div>
+    <p style="font-size:0.85rem;color:var(--text-secondary);">
+      💡 Tip: Increase height to see more details in the heatmap and chart. Changes are saved automatically when you click "Save Settings" below.
+    </p>
+  `;
+
+  const firstSection = settingsContainer.querySelector('.settings-section');
+  if (firstSection) firstSection.insertAdjacentElement('afterend', section);
+  else settingsContainer.prepend(section);
+
+  // Setup slider
+  const slider = document.getElementById('widget-height-slider');
+  const valueDisplay = document.getElementById('widget-height-value');
+
+  // Load saved value
+  const savedHeight = window.userSettings.widgetHeight || 700;
+  slider.value = savedHeight;
+  valueDisplay.textContent = savedHeight;
+  applyWidgetHeight(savedHeight);
+
+  // Real-time preview as you drag
+  slider.addEventListener('input', (e) => {
+    const height = e.target.value;
+    valueDisplay.textContent = height;
+    applyWidgetHeight(height);
+  });
+}
+
+function applyWidgetHeight(height) {
+  const widgets = document.querySelectorAll('.tv-widget');
+  widgets.forEach(widget => {
+    widget.style.height = height + 'px';
+    widget.style.minHeight = height + 'px';
+  });
+
+  const heatmap = document.getElementById('tv-heatmap');
+  if (heatmap) {
+    heatmap.style.height = height + 'px';
+  }
+}
+
 function setupSettingsButtons() {
+  // Inject widget size controls
+  injectWidgetSizeControls();
+
   // Inject Market Overview settings (admin only)
   injectMarketOverviewSettings();
 
@@ -1544,7 +1678,11 @@ function setupSettingsButtons() {
           // Market overview watchlist (comma-separated TradingView symbols)
           marketOverviewSymbols: document.getElementById('setting-market-symbols')
             ? document.getElementById('setting-market-symbols').value
-            : (window.userSettings.marketOverviewSymbols || '')
+            : (window.userSettings.marketOverviewSymbols || ''),
+          // Widget height control
+          widgetHeight: document.getElementById('widget-height-slider')
+            ? parseInt(document.getElementById('widget-height-slider').value)
+            : (window.userSettings.widgetHeight || 700)
         };
         await db.collection('users').doc(currentUser).set({ settings }, { merge: true });
 
