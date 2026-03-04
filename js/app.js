@@ -113,8 +113,6 @@ function showPage(page) {
     // Apply saved widget height
     const savedHeight = window.userSettings.widgetHeight || 700;
     applyWidgetHeight(savedHeight);
-    // Setup resize handles
-    setupWidgetResizeHandles();
   }
   if (page === 'trades') displayTrades();
   if (page === 'reports') updateReport();
@@ -428,13 +426,26 @@ function getMarketOverviewSymbols() {
 function injectTradingViewWidget(containerId, scriptSrc, configObj) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  el.innerHTML = '';
+
+  // Clear only the TradingView script, keep resize handle
+  const existingScripts = el.querySelectorAll('script');
+  existingScripts.forEach(s => s.remove());
+
   const script = document.createElement('script');
   script.type = 'text/javascript';
   script.async = true;
   script.src = scriptSrc;
   script.innerHTML = JSON.stringify(configObj);
   el.appendChild(script);
+
+  // Re-add resize handle if it doesn't exist
+  if (!el.querySelector('.widget-resize-handle')) {
+    const handle = document.createElement('div');
+    handle.className = 'widget-resize-handle';
+    handle.setAttribute('data-widget', containerId);
+    handle.textContent = '⋮⋮';
+    el.appendChild(handle);
+  }
 }
 
 function renderMarketOverviewWidgets() {
@@ -507,6 +518,11 @@ function renderMarketOverviewWidgets() {
       hasSymbolTooltip: true
     }
   );
+
+  // Setup resize handles after widgets are injected
+  setTimeout(() => {
+    setupWidgetResizeHandles();
+  }, 100);
 }
 
 // ─── Widget Resize Handles ────────────────────────────────────────────────────
