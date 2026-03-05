@@ -2073,18 +2073,31 @@ async function expandWidget(type) {
         return;
       }
 
+      // Filter: US exchanges only + market cap >= $500M
+      const usEarnings = data.earningsCalendar.filter(earning => {
+        const exchange = (earning.exchange || '').toUpperCase();
+        const marketCap = earning.marketCap || 0;
+        return (exchange === 'NASDAQ' || exchange === 'NYSE' || exchange === 'AMEX') && marketCap >= 500000000;
+      });
+
       // Group by date
       const byDate = {};
-      data.earningsCalendar.forEach(earning => {
+      usEarnings.forEach(earning => {
         const date = earning.date;
         if (!byDate[date]) {
           byDate[date] = { preMarket: [], afterMarket: [] };
         }
-        if (earning.hour === 'bmo' || earning.hour === 'before market open') {
+        if (earning.hour === 'bmo') {
           byDate[date].preMarket.push(earning);
-        } else {
+        } else if (earning.hour === 'amc') {
           byDate[date].afterMarket.push(earning);
         }
+      });
+
+      // Sort by market cap within each group
+      Object.keys(byDate).forEach(date => {
+        byDate[date].preMarket.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+        byDate[date].afterMarket.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
       });
 
       let html = '<div style="padding: 1rem; max-height: 600px; overflow-y: auto;">';
@@ -2098,31 +2111,34 @@ async function expandWidget(type) {
         const dateStr = date.toISOString().split('T')[0];
         const dayData = byDate[dateStr];
 
+        // Only show days with earnings
+        if (!dayData || (dayData.preMarket.length === 0 && dayData.afterMarket.length === 0)) {
+          continue;
+        }
+
         html += `<div style="margin-bottom: 1.5rem;">`;
         html += `<h4 style="color: var(--text-primary); margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--border-color);">${weekdays[i]}</h4>`;
 
-        if (!dayData || (dayData.preMarket.length === 0 && dayData.afterMarket.length === 0)) {
-          html += '<div style="padding: 1rem; color: #9ca3af; text-align: center;">No earnings</div>';
-        } else {
-          if (dayData.preMarket.length > 0) {
-            html += '<div style="margin-bottom: 1rem;"><div style="font-weight: 600; color: #3b82f6; margin-bottom: 0.5rem;">Pre-Market</div>';
-            html += '<table style="width: 100%; border-collapse: collapse;">';
-            dayData.preMarket.forEach((earning, idx) => {
-              const border = idx < dayData.preMarket.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '';
-              html += `<tr style="${border}"><td style="padding: 0.5rem; font-weight: 600;">${earning.symbol}</td><td style="padding: 0.5rem; text-align: right;">${earning.epsEstimate || 'N/A'}</td></tr>`;
-            });
-            html += '</table></div>';
-          }
+        if (dayData.preMarket.length > 0) {
+          html += '<div style="margin-bottom: 1rem;"><div style="font-weight: 600; color: #3b82f6; margin-bottom: 0.5rem;">Pre-Market</div>';
+          html += '<table style="width: 100%; border-collapse: collapse;">';
+          html += '<thead><tr style="border-bottom: 2px solid var(--border-color);"><th style="text-align: left; padding: 0.5rem; color: var(--text-secondary);">Symbol</th><th style="text-align: left; padding: 0.5rem; color: var(--text-secondary);">Date</th><th style="text-align: left; padding: 0.5rem; color: var(--text-secondary);">Time</th><th style="text-align: right; padding: 0.5rem; color: var(--text-secondary);">EPS Estimate</th></tr></thead><tbody>';
+          dayData.preMarket.forEach((earning, idx) => {
+            const border = idx < dayData.preMarket.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '';
+            html += `<tr style="${border}"><td style="padding: 0.5rem; font-weight: 600;">${earning.symbol}</td><td style="padding: 0.5rem;">${earning.date || 'N/A'}</td><td style="padding: 0.5rem;">Before Market</td><td style="padding: 0.5rem; text-align: right;">${earning.epsEstimate || 'N/A'}</td></tr>`;
+          });
+          html += '</tbody></table></div>';
+        }
 
-          if (dayData.afterMarket.length > 0) {
-            html += '<div><div style="font-weight: 600; color: #10b981; margin-bottom: 0.5rem;">After-Market</div>';
-            html += '<table style="width: 100%; border-collapse: collapse;">';
-            dayData.afterMarket.forEach((earning, idx) => {
-              const border = idx < dayData.afterMarket.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '';
-              html += `<tr style="${border}"><td style="padding: 0.5rem; font-weight: 600;">${earning.symbol}</td><td style="padding: 0.5rem; text-align: right;">${earning.epsEstimate || 'N/A'}</td></tr>`;
-            });
-            html += '</table></div>';
-          }
+        if (dayData.afterMarket.length > 0) {
+          html += '<div><div style="font-weight: 600; color: #10b981; margin-bottom: 0.5rem;">After-Market</div>';
+          html += '<table style="width: 100%; border-collapse: collapse;">';
+          html += '<thead><tr style="border-bottom: 2px solid var(--border-color);"><th style="text-align: left; padding: 0.5rem; color: var(--text-secondary);">Symbol</th><th style="text-align: left; padding: 0.5rem; color: var(--text-secondary);">Date</th><th style="text-align: left; padding: 0.5rem; color: var(--text-secondary);">Time</th><th style="text-align: right; padding: 0.5rem; color: var(--text-secondary);">EPS Estimate</th></tr></thead><tbody>';
+          dayData.afterMarket.forEach((earning, idx) => {
+            const border = idx < dayData.afterMarket.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '';
+            html += `<tr style="${border}"><td style="padding: 0.5rem; font-weight: 600;">${earning.symbol}</td><td style="padding: 0.5rem;">${earning.date || 'N/A'}</td><td style="padding: 0.5rem;">After Market</td><td style="padding: 0.5rem; text-align: right;">${earning.epsEstimate || 'N/A'}</td></tr>`;
+          });
+          html += '</tbody></table></div>';
         }
 
         html += '</div>';
@@ -2186,36 +2202,54 @@ async function renderEarningsCalendar() {
       return;
     }
 
-    // Group by time (before market / after market)
-    const preMarket = [];
-    const afterMarket = [];
-
-    data.earningsCalendar.forEach(earning => {
-      if (earning.hour === 'bmo' || earning.hour === 'before market open') {
-        preMarket.push(earning.symbol);
-      } else {
-        afterMarket.push(earning.symbol);
-      }
+    // Filter: US exchanges only + market cap >= $500M
+    const usEarnings = data.earningsCalendar.filter(earning => {
+      const exchange = (earning.exchange || '').toUpperCase();
+      const marketCap = earning.marketCap || 0;
+      return (exchange === 'NASDAQ' || exchange === 'NYSE' || exchange === 'AMEX') && marketCap >= 500000000;
     });
 
-    let html = '<div style="padding: 0.5rem;">';
+    if (usEarnings.length === 0) {
+      earningsContainer.innerHTML = '<div style="padding: 2rem; color: #9ca3af; text-align: center;">No earnings today</div>';
+      return;
+    }
+
+    // Group by time and sort by market cap
+    const preMarket = usEarnings.filter(e => e.hour === 'bmo').sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+    const afterMarket = usEarnings.filter(e => e.hour === 'amc').sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+
+    const maxDisplay = 5;
+
+    let html = '<div style="padding: 0.5rem; max-height: 220px; overflow-y: auto;">';
     html += '<div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.75rem; padding: 0.5rem;">Today\'s Earnings</div>';
 
     if (preMarket.length > 0) {
       html += '<div style="padding: 0.5rem; background: rgba(59, 130, 246, 0.05); border-left: 3px solid #3b82f6; margin-bottom: 0.75rem;">';
       html += '<div style="font-size: 0.75rem; color: #3b82f6; font-weight: 600; margin-bottom: 0.5rem;">PRE-MARKET</div>';
-      preMarket.forEach(symbol => {
-        html += `<div style="padding: 0.25rem 0; color: var(--text-primary);">${symbol}</div>`;
+
+      preMarket.slice(0, maxDisplay).forEach(earning => {
+        html += `<div style="padding: 0.25rem 0; color: var(--text-primary);">${earning.symbol}</div>`;
       });
+
+      if (preMarket.length > maxDisplay) {
+        html += `<div style="padding: 0.25rem 0; color: var(--text-secondary); font-size: 0.875rem;">+${preMarket.length - maxDisplay} more</div>`;
+      }
+
       html += '</div>';
     }
 
     if (afterMarket.length > 0) {
       html += '<div style="padding: 0.5rem; background: rgba(16, 185, 129, 0.05); border-left: 3px solid #10b981;">';
       html += '<div style="font-size: 0.75rem; color: #10b981; font-weight: 600; margin-bottom: 0.5rem;">AFTER-MARKET</div>';
-      afterMarket.forEach(symbol => {
-        html += `<div style="padding: 0.25rem 0; color: var(--text-primary);">${symbol}</div>`;
+
+      afterMarket.slice(0, maxDisplay).forEach(earning => {
+        html += `<div style="padding: 0.25rem 0; color: var(--text-primary);">${earning.symbol}</div>`;
       });
+
+      if (afterMarket.length > maxDisplay) {
+        html += `<div style="padding: 0.25rem 0; color: var(--text-secondary); font-size: 0.875rem;">+${afterMarket.length - maxDisplay} more</div>`;
+      }
+
       html += '</div>';
     }
 
