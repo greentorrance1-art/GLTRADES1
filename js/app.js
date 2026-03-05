@@ -1080,12 +1080,12 @@ function displayJournal() {
 // ─── GL University ─────────────────────────────────────────────────────────────
 // ── These are the hardcoded defaults shown until admin saves custom content ──
 const DEFAULT_COURSES = [
-  { icon: '📊', title: 'Risk Management Fundamentals',  description: 'Learn the essential principles of position sizing, stop losses, and portfolio risk management.', lessons: '8 Lessons',  level: 'Beginner'     },
-  { icon: '📈', title: 'Technical Analysis Mastery',    description: 'Master chart patterns, indicators, and price action trading strategies.',                          lessons: '12 Lessons', level: 'Intermediate' },
-  { icon: '🧠', title: 'Trading Psychology',            description: 'Develop mental discipline, emotional control, and winning trading habits.',                         lessons: '10 Lessons', level: 'All Levels'   },
-  { icon: '💰', title: 'Options Trading Strategies',    description: 'Understand options mechanics, spreads, and advanced trading strategies.',                           lessons: '15 Lessons', level: 'Advanced'     },
-  { icon: '🎯', title: 'Building Trading Systems',      description: 'Create, backtest, and optimize profitable trading systems and strategies.',                         lessons: '10 Lessons', level: 'Advanced'     },
-  { icon: '📉', title: 'Market Analysis & Research',   description: 'Develop skills in fundamental analysis, market research, and trade idea generation.',               lessons: '9 Lessons',  level: 'Intermediate' }
+  { icon: '📊', title: 'Risk Management Fundamentals',  description: 'Learn the essential principles of position sizing, stop losses, and portfolio risk management.', lessons: '8 Lessons',  level: 'Beginner',     url: '' },
+  { icon: '📈', title: 'Technical Analysis Mastery',    description: 'Master chart patterns, indicators, and price action trading strategies.',                          lessons: '12 Lessons', level: 'Intermediate', url: '' },
+  { icon: '🧠', title: 'Trading Psychology',            description: 'Develop mental discipline, emotional control, and winning trading habits.',                         lessons: '10 Lessons', level: 'All Levels',   url: '' },
+  { icon: '💰', title: 'Options Trading Strategies',    description: 'Understand options mechanics, spreads, and advanced trading strategies.',                           lessons: '15 Lessons', level: 'Advanced',     url: '' },
+  { icon: '🎯', title: 'Building Trading Systems',      description: 'Create, backtest, and optimize profitable trading systems and strategies.',                         lessons: '10 Lessons', level: 'Advanced',     url: '' },
+  { icon: '📉', title: 'Market Analysis & Research',   description: 'Develop skills in fundamental analysis, market research, and trade idea generation.',               lessons: '9 Lessons',  level: 'Intermediate', url: '' }
 ];
 
 const DEFAULT_READING = [
@@ -1149,7 +1149,7 @@ async function displayGLUniversity() {
           <span>${escHtml(c.lessons || '')}</span>
           <span>${escHtml(c.level || '')}</span>
         </div>
-        <button class="btn btn-outline">Start Learning</button>
+        <button class="btn btn-outline" onclick="openCourseURL('${escAttr(c.url || '')}')">Start Learning</button>
         ${isAdmin ? `
           <div class="admin-course-actions">
             <button class="btn btn-secondary action-btn" onclick="openEditCourseModal(${idx})">Edit</button>
@@ -1290,7 +1290,7 @@ function openAddCourseModal() {
   const icons = ['📊','📈','🧠','💰','🎯','📉','📚','🔗','⚡','🎓'];
   _openCourseModal({
     title: 'Add Course',
-    course: { icon: '📊', title: '', description: '', lessons: '', level: 'Beginner' },
+    course: { icon: '📊', title: '', description: '', lessons: '', level: 'Beginner', url: '' },
     icons,
     onSubmit: async (courseObj) => {
       // If still using defaults, seed Firestore with defaults first so edit buttons appear
@@ -1365,6 +1365,13 @@ function _openCourseModal({ title, course, icons, submitLabel = 'Save Course', o
             ).join('')}
           </select>
         </div>
+        <div class="form-group" style="margin-top:1rem;">
+          <label>Start Learning URL</label>
+          <input type="url" id="gc-url" class="setting-input"
+                 placeholder="https://example.com/course"
+                 value="${escAttr(course.url || '')}">
+          <small style="display:block;margin-top:0.5rem;color:var(--text-secondary);">When users click "Start Learning", this URL will open in a new tab</small>
+        </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="gl-course-modal-cancel">Cancel</button>
           <button type="submit" class="btn btn-primary">${escHtml(submitLabel)}</button>
@@ -1390,7 +1397,8 @@ function _openCourseModal({ title, course, icons, submitLabel = 'Save Course', o
         title:       document.getElementById('gc-title').value.trim(),
         description: document.getElementById('gc-desc').value.trim(),
         lessons:     document.getElementById('gc-lessons').value.trim(),
-        level:       document.getElementById('gc-level').value
+        level:       document.getElementById('gc-level').value,
+        url:         document.getElementById('gc-url').value.trim()
       });
       close();
     } catch (err) {
@@ -1408,6 +1416,15 @@ async function deleteCourse(idx) {
   courses.splice(idx, 1);
   await saveGLData({ courses });
   displayGLUniversity();
+}
+
+// Open course URL when Start Learning is clicked
+function openCourseURL(url) {
+  if (!url || url.trim() === '') {
+    alert('This course does not have a learning URL configured yet. Please contact the administrator.');
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 // ─── Admin: Reading List CRUD ──────────────────────────────────────────────────
