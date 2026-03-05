@@ -951,18 +951,48 @@ function renderJournalImagePreview() {
 }
 
 async function uploadJournalImages(files) {
+  console.log('📤 Starting upload for', files.length, 'images');
   const uploads = [];
+
   for (const file of files) {
-    const ref = storage.ref().child(`journal/${Date.now()}_${file.name}`);
-    uploads.push(ref.put(file).then(s => s.ref.getDownloadURL()));
+    console.log('📁 Uploading file:', file.name, 'Size:', file.size, 'bytes');
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `users/${currentUser}/journal/${Date.now()}_${safeName}`;
+    console.log('📍 Upload path:', path);
+
+    const ref = storage.ref(path);
+    const uploadTask = ref.put(file);
+
+    uploads.push(
+      uploadTask
+        .then(snapshot => {
+          console.log('✅ Upload complete:', snapshot.ref.fullPath);
+          return snapshot.ref.getDownloadURL();
+        })
+        .then(url => {
+          console.log('🔗 Got download URL:', url);
+          return url;
+        })
+        .catch(err => {
+          console.error('❌ Upload failed for', file.name, ':', err);
+          throw err;
+        })
+    );
   }
-  return Promise.all(uploads);
+
+  const urls = await Promise.all(uploads);
+  console.log('✅ All uploads complete. URLs:', urls);
+  return urls;
 }
 
 async function saveJournalEntry() {
   const submitBtn = document.querySelector('#journal-form button[type="submit"]');
   submitBtn.disabled = true;
   submitBtn.textContent = 'Saving...';
+
+  console.log('💾 Starting journal save...');
+  console.log('📊 Pending images:', pendingJournalImages.length);
+
   try {
     const data = {
       date: document.getElementById('journal-date').value,
@@ -973,22 +1003,36 @@ async function saveJournalEntry() {
       images: []
     };
 
+    console.log('📝 Journal data prepared:', data);
+
     let imageUrls = [];
     if (pendingJournalImages.length > 0) {
-      imageUrls = await uploadJournalImages(pendingJournalImages);
+      console.log('📤 Uploading', pendingJournalImages.length, 'images...');
+      try {
+        imageUrls = await uploadJournalImages(pendingJournalImages);
+        console.log('✅ Images uploaded successfully:', imageUrls);
+      } catch (uploadErr) {
+        console.error('❌ Image upload failed:', uploadErr);
+        alert(`Image upload failed: ${uploadErr.message}\n\nCheck Firebase Storage permissions.`);
+        return;
+      }
     }
 
     data.images = imageUrls;
+    console.log('💾 Saving to Firestore...');
     const docRef = await db.collection('users').doc(currentUser).collection('journal').add(data);
+    console.log('✅ Saved to Firestore with ID:', docRef.id);
 
     window.journalEntries.unshift({ id: docRef.id, ...data, images: imageUrls });
     pendingJournalImages = [];
     renderJournalImagePreview();
     document.getElementById('journal-modal').classList.remove('active');
     displayJournal();
+    console.log('✅ Journal entry saved successfully!');
   } catch (err) {
-    console.error('Error saving journal entry:', err);
-    alert('Error saving journal entry.');
+    console.error('❌ Error saving journal entry:', err);
+    console.error('Error details:', err.code, err.message, err.stack);
+    alert(`Error saving journal entry:\n\n${err.message}\n\nCheck console for details.`);
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = 'Save Entry';
