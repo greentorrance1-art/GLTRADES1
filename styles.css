@@ -974,3 +974,75 @@ form {
     color: var(--primary-color);
     font-size: 0.8rem;
 }
+
+/* ========================================
+   DARK MODE STYLES
+======================================== */
+body.dark-mode {
+    --background: #111827;
+    --surface: #1f2937;
+    --text-primary: #f9fafb;
+    --text-secondary: #9ca3af;
+    --border-color: #374151;
+}
+
+/* ========================================
+   MARKET INTELLIGENCE SECTION
+======================================== */
+.market-intelligence-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.intelligence-card {
+    background-color: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.intelligence-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.intelligence-header h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.tv-widget-compact {
+    height: 400px;
+    width: 100%;
+}
+
+/* Expand Modal Specific Styles */
+#widget-expand-modal .modal-content {
+    max-width: 90%;
+    width: 90%;
+    height: 90vh;
+}
+
+#expand-modal-body {
+    height: calc(100% - 60px);
+    overflow: auto;
+    padding: 1rem;
+}
+
+.tv-widget-expanded {
+    height: 100%;
+    min-height: 600px;
+    width: 100%;
+}
