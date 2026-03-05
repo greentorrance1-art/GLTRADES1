@@ -2048,35 +2048,16 @@ function expandWidget(type) {
     });
     expandedContainer.appendChild(script);
   } else if (type === 'earnings') {
-    // Display full earnings list from API
-    if (earningsData.length === 0) {
-      expandedContainer.innerHTML = '<div style="padding: 2rem; color: #9ca3af; text-align: center;">No earnings data available</div>';
-    } else {
-      let html = '<div style="padding: 1rem; max-height: 600px; overflow-y: auto;">';
-      html += '<table style="width: 100%; border-collapse: collapse;">';
-      html += '<thead><tr style="border-bottom: 2px solid var(--border-color);"><th style="text-align: left; padding: 0.75rem; color: var(--text-secondary); font-weight: 600;">Symbol</th><th style="text-align: left; padding: 0.75rem; color: var(--text-secondary); font-weight: 600;">Date</th><th style="text-align: left; padding: 0.75rem; color: var(--text-secondary); font-weight: 600;">Time</th><th style="text-align: right; padding: 0.75rem; color: var(--text-secondary); font-weight: 600;">EPS Estimate</th></tr></thead>';
-      html += '<tbody>';
-
-      earningsData.forEach((earning, index) => {
-        const symbol = earning.symbol || 'N/A';
-        const date = earning.date || 'N/A';
-        const time = earning.time || 'N/A';
-        const eps = earning.epsEstimated ? earning.epsEstimated.toFixed(2) : 'N/A';
-        const borderBottom = index < earningsData.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '';
-
-        html += `
-          <tr style="${borderBottom}">
-            <td style="padding: 0.75rem; font-weight: 600; color: var(--text-primary);">${symbol}</td>
-            <td style="padding: 0.75rem; color: var(--text-secondary);">${date}</td>
-            <td style="padding: 0.75rem; color: var(--text-secondary);">${time}</td>
-            <td style="padding: 0.75rem; text-align: right; color: var(--text-primary);">${eps}</td>
-          </tr>
-        `;
-      });
-
-      html += '</tbody></table></div>';
-      expandedContainer.innerHTML = html;
-    }
+    // Embed earnings widget in expanded view
+    expandedContainer.innerHTML = `
+      <iframe
+        src="https://earningscalendar.net/widget"
+        width="100%"
+        height="600"
+        frameborder="0"
+        style="border: none;">
+      </iframe>
+    `;
   } else if (type === 'news') {
     const script = document.createElement('script');
     script.type = 'text/javascript';
@@ -2102,11 +2083,9 @@ function closeExpandModal() {
 }
 
 // ========================================
-// EARNINGS CALENDAR - CUSTOM API
+// EARNINGS CALENDAR - FREE WIDGET
 // ========================================
-let earningsData = []; // Store full earnings data for expand modal
-
-async function renderEarningsCalendar() {
+function renderEarningsCalendar() {
   const earningsContainer = document.getElementById('tv-earnings-calendar');
   if (!earningsContainer) {
     console.error('❌ Earnings Calendar container NOT found');
@@ -2114,58 +2093,15 @@ async function renderEarningsCalendar() {
   }
 
   console.log('✅ Earnings Calendar container found');
-  earningsContainer.innerHTML = '<div style="padding: 1rem; color: #9ca3af;">Loading earnings...</div>';
 
-  try {
-    // Get date range (today to 7 days from now)
-    const today = new Date();
-    const nextWeek = new Date(today);
-    nextWeek.setDate(today.getDate() + 7);
-
-    const formatDate = (date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    const fromDate = formatDate(today);
-    const toDate = formatDate(nextWeek);
-
-    // Fetch earnings data
-    const response = await fetch(`https://financialmodelingprep.com/api/v3/earning_calendar?from=${fromDate}&to=${toDate}&apikey=demo`);
-    const data = await response.json();
-
-    // Store for expand modal
-    earningsData = data;
-
-    // Display next 5 earnings in preview
-    const nextFive = data.slice(0, 5);
-
-    let html = '<div style="padding: 0.5rem;">';
-
-    if (nextFive.length === 0) {
-      html += '<div style="color: #9ca3af; text-align: center; padding: 2rem;">No upcoming earnings data available</div>';
-    } else {
-      nextFive.forEach((earning, index) => {
-        const symbol = earning.symbol || 'N/A';
-        const time = earning.time || 'N/A';
-        const borderBottom = index < nextFive.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '';
-
-        html += `
-          <div style="display: flex; justify-content: space-between; padding: 0.75rem 0.5rem; ${borderBottom}">
-            <span style="font-weight: 600; color: var(--text-primary);">${symbol}</span>
-            <span style="color: var(--text-secondary); font-size: 0.875rem;">${time}</span>
-          </div>
-        `;
-      });
-    }
-
-    html += '</div>';
-    earningsContainer.innerHTML = html;
-
-  } catch (error) {
-    console.error('Error fetching earnings data:', error);
-    earningsContainer.innerHTML = '<div style="padding: 1rem; color: #ef4444;">Failed to load earnings data</div>';
-  }
+  // Embed EarningsCalendar.net widget (free, no API key required)
+  earningsContainer.innerHTML = `
+    <iframe
+      src="https://earningscalendar.net/widget"
+      width="100%"
+      height="350"
+      frameborder="0"
+      style="border: none;">
+    </iframe>
+  `;
 }
