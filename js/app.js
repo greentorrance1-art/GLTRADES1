@@ -427,9 +427,8 @@ function injectTradingViewWidget(containerId, scriptSrc, configObj) {
   const el = document.getElementById(containerId);
   if (!el) return;
 
-  // Clear only the TradingView script, keep resize handle
-  const existingScripts = el.querySelectorAll('script');
-  existingScripts.forEach(s => s.remove());
+  // Clear everything to prevent duplicates
+  el.innerHTML = '';
 
   const script = document.createElement('script');
   script.type = 'text/javascript';
@@ -438,8 +437,8 @@ function injectTradingViewWidget(containerId, scriptSrc, configObj) {
   script.innerHTML = JSON.stringify(configObj);
   el.appendChild(script);
 
-  // Re-add resize handle if it doesn't exist
-  if (!el.querySelector('.widget-resize-handle')) {
+  // Only add resize handle to chart and heatmap widgets (not ticker tape)
+  if (containerId === 'tv-advanced-chart' || containerId === 'tv-heatmap') {
     const handle = document.createElement('div');
     handle.className = 'widget-resize-handle';
     handle.setAttribute('data-widget', containerId);
