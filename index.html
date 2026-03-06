@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GLTRADES - Trading Analytics Platform</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="css/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -34,6 +34,7 @@
             <div class="page-header">
                 <h2>Dashboard</h2>
                 <div class="header-actions">
+                    <button class="btn" id="toggle-theme">☀️ Light Mode</button>
                     <button class="btn btn-primary" id="add-trade-btn">+ Add Trade</button>
                 </div>
             </div>
@@ -115,6 +116,31 @@
                         </thead>
                         <tbody></tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Market Intelligence -->
+            <div class="section">
+                <h3>Market Intelligence</h3>
+                <div class="market-intelligence-grid">
+                    <div class="intelligence-card">
+                        <div class="intelligence-header">
+                            <h4>📅 Economic Calendar</h4>
+                        </div>
+                        <div id="tv-economic-calendar" class="intelligence-widget"></div>
+                    </div>
+                    <div class="intelligence-card">
+                        <div class="intelligence-header">
+                            <h4>📊 Earnings Calendar</h4>
+                        </div>
+                        <div id="tv-earnings-calendar" class="intelligence-widget"></div>
+                    </div>
+                    <div class="intelligence-card">
+                        <div class="intelligence-header">
+                            <h4>📰 Market News</h4>
+                        </div>
+                        <div id="tv-market-news" class="intelligence-widget"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -352,9 +378,7 @@
                     </div>
                     <div class="form-group">
                         <label>Strategy</label>
-                        <select id="trade-strategy">
-                            <option value="">Select Strategy</option>
-                        </select>
+                        <input type="text" id="trade-strategy" placeholder="Momentum">
                     </div>
                     <div class="form-group full-width">
                         <label>Tags (comma separated)</label>
