@@ -34,6 +34,7 @@
             <div class="page-header">
                 <h2>Dashboard</h2>
                 <div class="header-actions">
+                    <button class="btn btn-secondary" id="dark-mode-toggle">🌙 Dark Mode</button>
                     <button class="btn btn-primary" id="add-trade-btn">+ Add Trade</button>
                 </div>
             </div>
@@ -93,6 +94,34 @@
                 <div class="chart-container">
                     <h3>Win/Loss Distribution</h3>
                     <canvas id="winloss-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Market Intelligence Section -->
+            <div class="section">
+                <h3>Market Intelligence</h3>
+                <div class="market-intelligence-grid">
+                    <div class="intelligence-card">
+                        <div class="intelligence-header">
+                            <h4>📅 Economic Calendar</h4>
+                            <button class="btn btn-sm" onclick="expandWidget('economic')">Expand</button>
+                        </div>
+                        <div id="tv-economic-calendar" class="tv-widget-compact"></div>
+                    </div>
+                    <div class="intelligence-card">
+                        <div class="intelligence-header">
+                            <h4>📊 Earnings Calendar</h4>
+                            <button class="btn btn-sm" onclick="expandWidget('earnings')">Expand</button>
+                        </div>
+                        <div id="tv-earnings-calendar" class="tv-widget-compact"></div>
+                    </div>
+                    <div class="intelligence-card">
+                        <div class="intelligence-header">
+                            <h4>📰 Market News</h4>
+                            <button class="btn btn-sm" onclick="expandWidget('news')">Expand</button>
+                        </div>
+                        <div id="tv-market-news" class="tv-widget-compact"></div>
+                    </div>
                 </div>
             </div>
 
@@ -316,14 +345,6 @@
                         <input type="date" id="trade-date" required>
                     </div>
                     <div class="form-group">
-                        <label>Entry Time</label>
-                        <input type="time" id="trade-entry-time" placeholder="09:30">
-                    </div>
-                    <div class="form-group">
-                        <label>Exit Time</label>
-                        <input type="time" id="trade-exit-time" placeholder="10:45">
-                    </div>
-                    <div class="form-group">
                         <label>Symbol</label>
                         <input type="text" id="trade-symbol" placeholder="AAPL" required>
                     </div>
@@ -352,9 +373,7 @@
                     </div>
                     <div class="form-group">
                         <label>Strategy</label>
-                        <select id="trade-strategy">
-                            <option value="">Select Strategy</option>
-                        </select>
+                        <input type="text" id="trade-strategy" placeholder="Momentum">
                     </div>
                     <div class="form-group full-width">
                         <label>Tags (comma separated)</label>
@@ -453,6 +472,17 @@
                     <button type="submit" class="btn btn-primary">Save Entry</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Market Intelligence Expand Modal -->
+    <div id="widget-expand-modal" class="modal">
+        <div class="modal-content" style="max-width: 90%; height: 90vh;">
+            <div class="modal-header">
+                <h3 id="expand-modal-title">Widget</h3>
+                <button class="modal-close" onclick="closeExpandModal()">&times;</button>
+            </div>
+            <div id="expand-modal-body" style="height: calc(100% - 60px); overflow: auto;"></div>
         </div>
     </div>
 
