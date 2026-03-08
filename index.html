@@ -104,18 +104,21 @@
                     <div class="intelligence-card">
                         <div class="intelligence-header">
                             <h4>📅 Economic Calendar</h4>
+                            <button class="btn btn-secondary expand-btn" onclick="expandWidget('economic')">Expand</button>
                         </div>
                         <div id="tv-economic-calendar" class="intelligence-widget"></div>
                     </div>
                     <div class="intelligence-card">
                         <div class="intelligence-header">
                             <h4>📊 Earnings Calendar</h4>
+                            <button class="btn btn-secondary expand-btn" onclick="expandWidget('earnings')">Expand</button>
                         </div>
                         <div id="tv-earnings-calendar" class="intelligence-widget"></div>
                     </div>
                     <div class="intelligence-card">
                         <div class="intelligence-header">
                             <h4>📰 Market News</h4>
+                            <button class="btn btn-secondary expand-btn" onclick="expandWidget('news')">Expand</button>
                         </div>
                         <div id="tv-market-news" class="intelligence-widget"></div>
                     </div>
@@ -477,6 +480,17 @@
                     <button type="submit" class="btn btn-primary">Save Entry</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Widget Expand Modal -->
+    <div id="widget-expand-modal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 id="expand-modal-title">Widget</h3>
+                <button class="modal-close" id="close-expand-modal">&times;</button>
+            </div>
+            <div id="expand-modal-body"></div>
         </div>
     </div>
 
