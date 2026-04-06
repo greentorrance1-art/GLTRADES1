@@ -1872,37 +1872,23 @@ async function importTradesFromCSV(csvText) {
     // Parse header row to find column indices (exact match for Tradovate format)
     const header = lines[0].split(',').map(h => h.trim());
 
-    const symbolIdx = header.indexOf('symbol');
-    const qtyIdx = header.indexOf('qty');
-    const buyPriceIdx = header.indexOf('buyPrice');
+    const symbolIdx    = header.indexOf('symbol');
+    const qtyIdx       = header.indexOf('qty');
+    const buyPriceIdx  = header.indexOf('buyPrice');
     const sellPriceIdx = header.indexOf('sellPrice');
-    const buyTimeIdx = header.indexOf('boughtTimestamp');
-    const sellTimeIdx = header.indexOf('soldTimestamp');
-    const plIdx = header.indexOf('pnl');
+    const buyTimeIdx   = header.indexOf('boughtTimestamp');
+    const sellTimeIdx  = header.indexOf('soldTimestamp');
 
     // Validate required columns
     if (symbolIdx === -1 || qtyIdx === -1 || buyPriceIdx === -1 || sellPriceIdx === -1) {
-      alert('CSV file is missing required columns.\n\nExpected: symbol, qty, buyPrice, sellPrice, boughtTimestamp, soldTimestamp, pnl');
+      alert('CSV file is missing required columns.\n\nExpected: symbol, qty, buyPrice, sellPrice, boughtTimestamp, soldTimestamp');
       return;
     }
 
-    // Parse P&L with Tradovate formatting: $6.50 or $(18.50)
-    const parsePnL = (plStr) => {
-      if (!plStr) return 0;
-      // Remove dollar sign
-      let value = plStr.replace('$', '');
-      // Check for parentheses (negative)
-      if (value.startsWith('(') && value.endsWith(')')) {
-        value = '-' + value.slice(1, -1);
-      }
-      return parseFloat(value);
-    };
-
-    // Parse times (format: "12/01/2025 08:48:29")
+    // Parse times (format: "12/01/2025 08:48:29") → ISO string
     const parseTime = (timeStr) => {
       if (!timeStr) return null;
       try {
-        // Parse MM/DD/YYYY HH:MM:SS format
         const parts = timeStr.split(' ');
         if (parts.length !== 2) return null;
 
@@ -1911,10 +1897,10 @@ async function importTradesFromCSV(csvText) {
 
         if (dateParts.length !== 3 || timeParts.length !== 3) return null;
 
-        const month = dateParts[0].padStart(2, '0');
-        const day = dateParts[1].padStart(2, '0');
-        const year = dateParts[2];
-        const hour = timeParts[0].padStart(2, '0');
+        const month  = dateParts[0].padStart(2, '0');
+        const day    = dateParts[1].padStart(2, '0');
+        const year   = dateParts[2];
+        const hour   = timeParts[0].padStart(2, '0');
         const minute = timeParts[1].padStart(2, '0');
         const second = timeParts[2].padStart(2, '0');
 
@@ -1924,8 +1910,8 @@ async function importTradesFromCSV(csvText) {
       }
     };
 
-    // Step 1: Parse all fills into an array
-    const fills = [];
+    // Step 1: Parse all execution rows into fills
+    const allFills = [];
     for (let i = 1; i < lines.length; i++) {
       const row = lines[i].split(',').map(cell => cell.trim());
 
@@ -1935,137 +1921,261 @@ async function importTradesFromCSV(csvText) {
       }
 
       try {
-        const symbol = row[symbolIdx];
-        const qty = parseFloat(row[qtyIdx]);
-        const buyPrice = parseFloat(row[buyPriceIdx]);
-        const sellPrice = parseFloat(row[sellPriceIdx]);
-        const boughtTimestamp = buyTimeIdx >= 0 ? row[buyTimeIdx] : null;
-        const soldTimestamp = sellTimeIdx >= 0 ? row[sellTimeIdx] : null;
-        const pnl = plIdx >= 0 ? parsePnL(row[plIdx]) : 0;
+        const symbol           = row[symbolIdx];
+        const qty              = parseFloat(row[qtyIdx]);
+        const buyPrice         = parseFloat(row[buyPriceIdx]);
+        const sellPrice        = parseFloat(row[sellPriceIdx]);
+        const boughtTimestamp  = buyTimeIdx >= 0 ? row[buyTimeIdx] : null;
+        const soldTimestamp    = sellTimeIdx >= 0 ? row[sellTimeIdx] : null;
 
-        fills.push({
-          symbol,
-          qty,
-          buyPrice,
-          sellPrice,
-          boughtTimestamp,
-          soldTimestamp,
-          pnl
-        });
+        if (!symbol || isNaN(qty) || qty <= 0) continue;
+
+        allFills.push({ symbol, qty, buyPrice, sellPrice, boughtTimestamp, soldTimestamp });
       } catch (err) {
         console.error(`Error parsing row ${i + 1}:`, err);
       }
     }
 
-    // Step 2: Group fills by symbol + soldTimestamp
-    const tradeGroups = {};
-
-    for (const fill of fills) {
-      const groupKey = `${fill.symbol}|${fill.soldTimestamp}`;
-
-      if (!tradeGroups[groupKey]) {
-        tradeGroups[groupKey] = [];
-      }
-
-      tradeGroups[groupKey].push(fill);
+    // Step 2: Group fills by symbol, then run FIFO position reconstruction per symbol
+    const fillsBySymbol = {};
+    for (const fill of allFills) {
+      if (!fillsBySymbol[fill.symbol]) fillsBySymbol[fill.symbol] = [];
+      fillsBySymbol[fill.symbol].push(fill);
     }
 
-    // Step 3: Reconstruct complete trades from grouped fills
-    let imported = 0;
-    let skipped = 0;
-    let errors = 0;
+    // Step 3: FIFO position-based trade reconstruction
+    const commissionPerContract = 2.00; // per side, so round-trip = 2x
+    const reconstructedTrades = [];
 
-    for (const [groupKey, groupFills] of Object.entries(tradeGroups)) {
-      await new Promise(resolve => setTimeout(resolve, 0)); // Yield to UI thread
+    for (const [symbol, fills] of Object.entries(fillsBySymbol)) {
+      // Sort all fills by boughtTimestamp ascending
+      fills.sort((a, b) => {
+        const ta = parseTime(a.boughtTimestamp) || '';
+        const tb = parseTime(b.boughtTimestamp) || '';
+        return ta < tb ? -1 : ta > tb ? 1 : 0;
+      });
 
-      try {
-        // Calculate aggregated values
-        let totalQty = 0;
-        let weightedBuyPrice = 0;
-        let weightedSellPrice = 0;
-        let totalPnL = 0;
-        let earliestBuyTime = null;
-        const symbol = groupFills[0].symbol;
-        const soldTimestamp = groupFills[0].soldTimestamp;
+      let position  = 0;
+      let entryQueue = []; // { price, qty, timestamp }
+      // Active trade accumulator (reset when position hits 0)
+      let activeTrade = null;
 
-        for (const fill of groupFills) {
-          totalQty += fill.qty;
-          weightedBuyPrice += fill.buyPrice * fill.qty;
-          weightedSellPrice += fill.sellPrice * fill.qty;
-          totalPnL += fill.pnl;
+      const finalizeAndReset = () => {
+        if (activeTrade && activeTrade.exitQty > 0) {
+          reconstructedTrades.push(activeTrade);
+        }
+        activeTrade = null;
+        entryQueue  = [];
+        position    = 0;
+      };
 
-          // Track earliest buy time
-          const buyTime = parseTime(fill.boughtTimestamp);
-          if (buyTime && (!earliestBuyTime || buyTime < earliestBuyTime)) {
-            earliestBuyTime = buyTime;
+      for (const fill of fills) {
+        const isBuy  = !isNaN(fill.buyPrice)  && fill.buyPrice  > 0;
+        const isSell = !isNaN(fill.sellPrice) && fill.sellPrice > 0;
+
+        if (isBuy && isSell) {
+          // Row has both prices — Tradovate round-trip row (one entry + one exit in same row)
+          // Treat as: BUY first, then immediately SELL
+          // Handle as a self-contained trade if position is currently 0
+          const entryISO = parseTime(fill.boughtTimestamp);
+          const exitISO  = parseTime(fill.soldTimestamp);
+          const qty      = fill.qty;
+
+          if (position === 0) {
+            // Self-contained long trade
+            const pnl       = (fill.sellPrice - fill.buyPrice) * 2 * qty;
+            const commission = qty * commissionPerContract * 2;
+            const netPnL    = pnl - commission;
+
+            reconstructedTrades.push({
+              symbol,
+              side: 'long',
+              quantity: qty,
+              entryISO,
+              exitISO,
+              entryPrice: fill.buyPrice,
+              exitPrice: fill.sellPrice,
+              netPnL
+            });
+          } else {
+            // Mid-position row — add as entry then exit
+            entryQueue.push({ price: fill.buyPrice, qty, timestamp: entryISO });
+            position += qty;
+
+            if (!activeTrade) {
+              activeTrade = {
+                symbol,
+                side: 'long',
+                entryISO,
+                exitISO: null,
+                entryQty: 0,
+                exitQty: 0,
+                weightedEntry: 0,
+                weightedExit: 0,
+                netPnL: 0
+              };
+            }
+            activeTrade.entryQty      += qty;
+            activeTrade.weightedEntry += fill.buyPrice * qty;
+
+            // Now process sell side
+            let remaining = qty;
+            while (remaining > 0 && entryQueue.length > 0) {
+              const head      = entryQueue[0];
+              const matched   = Math.min(head.qty, remaining);
+              const pnl       = (fill.sellPrice - head.price) * 2 * matched;
+              const commission = matched * commissionPerContract * 2;
+
+              activeTrade.weightedExit += fill.sellPrice * matched;
+              activeTrade.exitQty      += matched;
+              activeTrade.netPnL       += pnl - commission;
+              if (!activeTrade.exitISO) activeTrade.exitISO = exitISO;
+
+              head.qty  -= matched;
+              remaining -= matched;
+              position  -= matched;
+
+              if (head.qty <= 0) entryQueue.shift();
+            }
+
+            if (position === 0) finalizeAndReset();
           }
+          continue;
         }
 
-        // Calculate weighted averages
-        const avgEntryPrice = weightedBuyPrice / totalQty;
-        const avgExitPrice = weightedSellPrice / totalQty;
+        if (isBuy && !isSell) {
+          // Pure BUY fill — add to entry queue
+          const entryISO = parseTime(fill.boughtTimestamp);
 
-        // Apply commission: $0.90 per contract (round-trip)
-        const commission = totalQty * 0.90;
-        const finalPnL = totalPnL - commission;
+          entryQueue.push({ price: fill.buyPrice, qty: fill.qty, timestamp: entryISO });
+          position += fill.qty;
 
-        // Parse exit time
-        const exitTime = parseTime(soldTimestamp);
-        const entryTime = earliestBuyTime;
+          if (!activeTrade) {
+            activeTrade = {
+              symbol,
+              side: 'long',
+              entryISO,
+              exitISO: null,
+              entryQty: 0,
+              exitQty: 0,
+              weightedEntry: 0,
+              weightedExit: 0,
+              netPnL: 0
+            };
+          }
+          activeTrade.entryQty      += fill.qty;
+          activeTrade.weightedEntry += fill.buyPrice * fill.qty;
+          continue;
+        }
 
-        // Extract date from entry time
-        const tradeDate = entryTime ? entryTime.split('T')[0] : new Date().toISOString().split('T')[0];
+        if (isSell && !isBuy) {
+          // Pure SELL fill — match against entryQueue via FIFO
+          const exitISO  = parseTime(fill.soldTimestamp);
+          let remaining  = fill.qty;
 
-        // Check for duplicates
-        const isDuplicate = window.trades.some(t =>
-          t.symbol === symbol &&
-          t.entryTime === (entryTime ? entryTime.split('T')[1] : null) &&
-          t.exitTime === (exitTime ? exitTime.split('T')[1] : null) &&
-          t.date === tradeDate
+          if (!activeTrade) {
+            // Orphan sell (short entry or data gap) — skip gracefully
+            console.warn(`Orphan sell fill for ${symbol} at ${exitISO}, skipping`);
+            continue;
+          }
+
+          while (remaining > 0 && entryQueue.length > 0) {
+            const head      = entryQueue[0];
+            const matched   = Math.min(head.qty, remaining);
+            const pnl       = (fill.sellPrice - head.price) * 2 * matched;
+            const commission = matched * commissionPerContract * 2;
+
+            activeTrade.weightedExit += fill.sellPrice * matched;
+            activeTrade.exitQty      += matched;
+            activeTrade.netPnL       += pnl - commission;
+            if (!activeTrade.exitISO) activeTrade.exitISO = exitISO;
+
+            head.qty  -= matched;
+            remaining -= matched;
+            position  -= matched;
+
+            if (head.qty <= 0) entryQueue.shift();
+          }
+
+          if (position === 0) finalizeAndReset();
+          continue;
+        }
+      } // end fills loop
+
+      // Flush any open position that never hit zero (incomplete data)
+      if (activeTrade && activeTrade.exitQty > 0) {
+        reconstructedTrades.push(activeTrade);
+      }
+    } // end symbol loop
+
+    // Step 4: Save reconstructed trades (with duplicate check)
+    let imported = 0;
+    let skipped  = 0;
+    let errors   = 0;
+
+    for (const t of reconstructedTrades) {
+      await new Promise(resolve => setTimeout(resolve, 0)); // yield to UI
+
+      try {
+        const avgEntry = t.entryQty > 0 ? parseFloat((t.weightedEntry / t.entryQty).toFixed(2)) : 0;
+        const avgExit  = t.exitQty  > 0 ? parseFloat((t.weightedExit  / t.exitQty).toFixed(2))  : 0;
+        const qty      = t.exitQty;
+        const netPnL   = parseFloat(t.netPnL.toFixed(2));
+
+        const entryISOStr = t.entryISO || null;
+        const exitISOStr  = t.exitISO  || null;
+        const tradeDate   = entryISOStr ? entryISOStr.split('T')[0] : new Date().toISOString().split('T')[0];
+        const entryTime   = entryISOStr ? entryISOStr.split('T')[1] : null;
+        const exitTime    = exitISOStr  ? exitISOStr.split('T')[1]  : null;
+
+        // Duplicate check: match on all key identifiers
+        const isDuplicate = window.trades.some(existing =>
+          existing.symbol     === t.symbol &&
+          existing.entryPrice === avgEntry  &&
+          existing.exitPrice  === avgExit   &&
+          existing.quantity   === qty       &&
+          existing.date       === tradeDate &&
+          existing.entryTime  === entryTime &&
+          existing.exitTime   === exitTime
         );
 
         if (isDuplicate) {
-          console.log(`Skipping duplicate trade: ${symbol} at ${entryTime}`);
+          console.log(`Skipping duplicate: ${t.symbol} ${tradeDate} entry=${avgEntry} exit=${avgExit}`);
           skipped++;
           continue;
         }
 
-        // Determine side and outcome based on final P&L
-        const side = finalPnL >= 0 ? 'long' : 'short';
         let outcome = 'breakeven';
-        if (finalPnL > 0) outcome = 'win';
-        else if (finalPnL < 0) outcome = 'loss';
+        if (netPnL > 0) outcome = 'win';
+        else if (netPnL < 0) outcome = 'loss';
 
-        // Create trade object
+        const commission = parseFloat((qty * commissionPerContract * 2).toFixed(2));
+
         const tradeData = {
-          date: tradeDate,
-          entryTime: entryTime ? entryTime.split('T')[1] : null,
-          exitTime: exitTime ? exitTime.split('T')[1] : null,
-          symbol: symbol,
-          side: side,
-          quantity: totalQty,
-          entryPrice: parseFloat(avgEntryPrice.toFixed(2)),
-          exitPrice: parseFloat(avgExitPrice.toFixed(2)),
-          stopLoss: null,
-          pl: parseFloat(finalPnL.toFixed(2)),
-          rMultiple: null,
-          outcome: outcome,
-          strategy: 'CSV Import',
-          tags: ['imported'],
-          notes: `Imported from CSV (${groupFills.length} fills, $${commission.toFixed(2)} commission) on ${new Date().toISOString().split('T')[0]}`,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          date:       tradeDate,
+          entryTime:  entryTime,
+          exitTime:   exitTime,
+          symbol:     t.symbol,
+          side:       t.side,
+          quantity:   qty,
+          entryPrice: avgEntry,
+          exitPrice:  avgExit,
+          stopLoss:   null,
+          pl:         netPnL,
+          rMultiple:  null,
+          outcome:    outcome,
+          strategy:   'CSV Import',
+          tags:       ['imported'],
+          notes:      `Imported from Tradovate CSV ($${commission.toFixed(2)} commission) on ${new Date().toISOString().split('T')[0]}`,
+          createdAt:  firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        // Save to Firestore
         const docRef = await db.collection('users').doc(currentUser).collection('trades').add(tradeData);
-
-        // Add to local array
         window.trades.unshift({ id: docRef.id, ...tradeData });
-
         imported++;
 
       } catch (err) {
-        console.error(`Error processing trade group ${groupKey}:`, err);
+        console.error('Error saving reconstructed trade:', err);
         errors++;
       }
     }
@@ -2074,7 +2184,6 @@ async function importTradesFromCSV(csvText) {
     updateDashboard();
     displayTrades();
 
-    // Show summary
     alert(`Import Complete\n\nImported: ${imported} trades\nSkipped (duplicates): ${skipped}\nErrors: ${errors}`);
 
   } catch (err) {
