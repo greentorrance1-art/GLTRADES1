@@ -2410,17 +2410,47 @@ function setupSettingsButtons() {
       }
     });
   }
+
+  // ── FIX 1: Reset Trades Only ───────────────────────────────────────────────
+  const resetTradesBtn = document.getElementById('reset-trades-btn');
+  if (resetTradesBtn) {
+    resetTradesBtn.addEventListener('click', async () => {
+      if (!confirm('Delete ALL trades? This cannot be undone.')) return;
+      try {
+        const tradesRef = db.collection('users').doc(currentUser).collection('trades');
+        const snapshot  = await tradesRef.get();
+        const batch     = db.batch();
+        snapshot.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        window.trades = [];
+        if (typeof updateDashboard === 'function') updateDashboard();
+        if (typeof displayTrades   === 'function') displayTrades();
+        alert('All trades deleted.');
+      } catch (err) {
+        console.error('Reset trades error:', err);
+        alert('Error deleting trades.');
+      }
+    });
+  }
 }
 
 // ─── Account Overview ─────────────────────────────────────────────────────────
 
+function getInputValue(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const value = parseFloat(el.value);
+  if (isNaN(value)) return null;
+  return value;
+}
+
 async function loadAccountData() {
   if (!currentUser) return;
   try {
-    const logsRef = db.collection('users').doc(currentUser).collection('accountLogs');
+    const logsRef  = db.collection('users').doc(currentUser).collection('accountLogs');
     const snapshot = await logsRef.get();
 
-    let deposits = 0;
+    let deposits    = 0;
     let withdrawals = 0;
 
     snapshot.forEach(doc => {
@@ -2451,10 +2481,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const withdrawBtn = document.getElementById('add-withdraw-btn');
   const balanceBtn  = document.getElementById('set-balance-btn');
 
+  // ── FIX 2: Deposit ─────────────────────────────────────────────────────────
   if (depositBtn) {
     depositBtn.addEventListener('click', async () => {
-      const amount = parseFloat(document.getElementById('deposit-input').value);
-      if (isNaN(amount) || amount <= 0) { alert('Enter valid deposit'); return; }
+      const amount = getInputValue('deposit-input');
+      if (amount === null) return;
       await db.collection('users').doc(currentUser).collection('accountLogs').add({
         type: 'deposit', amount,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -2464,10 +2495,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ── FIX 2: Withdrawal ──────────────────────────────────────────────────────
   if (withdrawBtn) {
     withdrawBtn.addEventListener('click', async () => {
-      const amount = parseFloat(document.getElementById('withdraw-input').value);
-      if (isNaN(amount) || amount <= 0) { alert('Enter valid withdrawal'); return; }
+      const amount = getInputValue('withdraw-input');
+      if (amount === null) return;
       await db.collection('users').doc(currentUser).collection('accountLogs').add({
         type: 'withdrawal', amount,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -2477,10 +2509,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ── FIX 2: Balance ─────────────────────────────────────────────────────────
   if (balanceBtn) {
     balanceBtn.addEventListener('click', async () => {
-      const amount = parseFloat(document.getElementById('balance-input').value);
-      if (isNaN(amount)) { alert('Enter valid balance'); return; }
+      const amount = getInputValue('balance-input');
+      if (amount === null) return;
       await db.collection('users').doc(currentUser).set(
         { currentBalance: amount }, { merge: true }
       );
@@ -2489,7 +2522,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Initial load — wait for auth to resolve
+  // Initial load after auth resolves
   setTimeout(() => loadAccountData(), 500);
 });
 
