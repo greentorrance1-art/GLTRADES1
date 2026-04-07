@@ -16,6 +16,10 @@
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     --radius: 8px;
+    /* Account modal theme tokens */
+    --card-bg: #ffffff;
+    --input-bg: #f5f5f5;
+    --text-muted: #777777;
 }
 
 * {
@@ -984,6 +988,10 @@ body.dark-mode {
     --text-primary: #f9fafb;
     --text-secondary: #9ca3af;
     --border-color: #374151;
+    /* Account modal theme tokens — dark overrides */
+    --card-bg: #1e1e1e;
+    --input-bg: #2a2a2a;
+    --text-muted: #aaaaaa;
 }
 
 /* ========================================
@@ -1045,4 +1053,56 @@ body.dark-mode {
     height: 100%;
     min-height: 600px;
     width: 100%;
+}
+
+/* ========================================
+   ACCOUNT MODAL — THEME-SAFE STYLES
+   Overrides inline dark fallbacks so both
+   light mode and dark mode render correctly.
+======================================== */
+#account-modal,
+#history-modal {
+    background-color: rgba(0, 0, 0, 0.6);
+}
+
+#account-modal > div,
+#history-modal > div {
+    background: var(--card-bg) !important;
+    color: var(--text-primary) !important;
+    border-radius: 0.75rem;
+    padding: 2rem;
+}
+
+#account-modal h3,
+#history-modal h3,
+#account-modal-title {
+    color: var(--text-primary) !important;
+}
+
+#account-modal input[type="number"],
+#account-modal input[type="date"],
+#account-modal input[type="time"],
+#modal-amount,
+#modal-date,
+#modal-time {
+    background: var(--input-bg) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 0.375rem;
+    padding: 0.6rem;
+    font-size: 1rem;
+    width: 100%;
+}
+
+#account-modal input::placeholder {
+    color: var(--text-muted) !important;
+}
+
+#history-list {
+    color: var(--text-primary) !important;
+}
+
+#history-list div {
+    border-bottom-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
 }
