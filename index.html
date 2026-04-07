@@ -39,6 +39,25 @@
                 </div>
             </div>
 
+            <!-- ACCOUNT OVERVIEW -->
+            <div id="account-overview" class="card" style="margin-bottom:1.5rem;">
+              <h3>Account Overview</h3>
+              <div class="account-metrics" style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:1rem;">
+                <div>Total Deposited: <strong>$<span id="total-deposits">0.00</span></strong></div>
+                <div>Total Withdrawn: <strong>$<span id="total-withdrawals">0.00</span></strong></div>
+                <div>Current Balance: <strong>$<span id="current-balance">0.00</span></strong></div>
+                <div>Real P&amp;L: <strong>$<span id="real-pnl">0.00</span></strong></div>
+              </div>
+              <div class="account-actions" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+                <input type="number" id="deposit-input" placeholder="Deposit Amount" style="padding:0.5rem;border:1px solid var(--border);border-radius:0.375rem;background:var(--bg-secondary);color:var(--text-primary);width:160px;" />
+                <button id="add-deposit-btn" class="btn btn-secondary">Add Deposit</button>
+                <input type="number" id="withdraw-input" placeholder="Withdraw Amount" style="padding:0.5rem;border:1px solid var(--border);border-radius:0.375rem;background:var(--bg-secondary);color:var(--text-primary);width:160px;" />
+                <button id="add-withdraw-btn" class="btn btn-secondary">Add Withdrawal</button>
+                <input type="number" id="balance-input" placeholder="Set Current Balance" style="padding:0.5rem;border:1px solid var(--border);border-radius:0.375rem;background:var(--bg-secondary);color:var(--text-primary);width:170px;" />
+                <button id="set-balance-btn" class="btn btn-secondary">Update Balance</button>
+              </div>
+            </div>
+
             <!-- Metrics Grid -->
             <div class="metrics-grid">
                 <div class="metric-card">
@@ -123,25 +142,6 @@
                         <div id="tv-market-news" class="intelligence-widget"></div>
                     </div>
                 </div>
-            </div>
-
-            <!-- ACCOUNT OVERVIEW (NEW) -->
-            <div id="account-overview" class="card" style="margin-bottom:1.5rem;">
-              <h3>Account Overview</h3>
-              <div class="account-metrics" style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:1rem;">
-                <div>Total Deposited: <strong>$<span id="total-deposits">0.00</span></strong></div>
-                <div>Total Withdrawn: <strong>$<span id="total-withdrawals">0.00</span></strong></div>
-                <div>Current Balance: <strong>$<span id="current-balance">0.00</span></strong></div>
-                <div>Real P&amp;L: <strong>$<span id="real-pnl">0.00</span></strong></div>
-              </div>
-              <div class="account-actions" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
-                <input type="number" id="deposit-input" placeholder="Deposit Amount" style="padding:0.5rem;border:1px solid var(--border);border-radius:0.375rem;background:var(--bg-secondary);color:var(--text-primary);width:160px;" />
-                <button id="add-deposit-btn" class="btn btn-secondary">Add Deposit</button>
-                <input type="number" id="withdraw-input" placeholder="Withdraw Amount" style="padding:0.5rem;border:1px solid var(--border);border-radius:0.375rem;background:var(--bg-secondary);color:var(--text-primary);width:160px;" />
-                <button id="add-withdraw-btn" class="btn btn-secondary">Add Withdrawal</button>
-                <input type="number" id="balance-input" placeholder="Set Current Balance" style="padding:0.5rem;border:1px solid var(--border);border-radius:0.375rem;background:var(--bg-secondary);color:var(--text-primary);width:170px;" />
-                <button id="set-balance-btn" class="btn btn-secondary">Update Balance</button>
-              </div>
             </div>
 
             <!-- Recent Trades -->
@@ -340,6 +340,7 @@
                         <button class="btn btn-secondary" id="export-data-btn">Export All Data</button>
                         <button class="btn btn-secondary" id="import-data-btn">Import Data</button>
                         <button class="btn btn-secondary" id="import-csv-trades-btn">Import Trades (CSV)</button>
+                        <button class="btn btn-danger" id="reset-trades-btn">Reset Trades Only</button>
                         <button class="btn btn-danger" id="reset-data-btn">Reset All Data</button>
                     </div>
                     <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
