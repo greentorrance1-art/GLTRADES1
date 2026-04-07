@@ -2439,21 +2439,19 @@ function setupSettingsButtons() {
 async function loadAccountData() {
   if (!currentUser) return;
   try {
-    const logsRef  = db.collection('users').doc(currentUser).collection('accountLogs');
-    const snapshot = await logsRef.get();
+    // Stored as an array on the user doc (no subcollection — avoids security rule issues)
+    const userDoc = await db.collection('users').doc(currentUser).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+
+    const logs    = Array.isArray(userData.accountLogs) ? userData.accountLogs : [];
+    const balance = userData.currentBalance != null ? userData.currentBalance : 0;
 
     let deposits    = 0;
     let withdrawals = 0;
-
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      if (data.type === 'deposit')    deposits    += data.amount;
-      if (data.type === 'withdrawal') withdrawals += data.amount;
+    logs.forEach(entry => {
+      if (entry.type === 'deposit')    deposits    += entry.amount;
+      if (entry.type === 'withdrawal') withdrawals += entry.amount;
     });
-
-    const userDoc = await db.collection('users').doc(currentUser).get();
-    const balance = (userDoc.exists && userDoc.data().currentBalance != null)
-      ? userDoc.data().currentBalance : 0;
 
     const realPnL = balance - deposits + withdrawals;
 
@@ -2542,12 +2540,19 @@ function setupAccountOverview() {
             { currentBalance: amount }, { merge: true }
           );
         } else {
-          await db.collection('users').doc(currentUser).collection('accountLogs').add({
+          // Append to accountLogs array on the user doc.
+          // Uses FieldValue.arrayUnion so concurrent writes are safe.
+          const logEntry = {
             type:      currentAction,
             amount,
-            timestamp: firestoreTimestamp,
-            dateLabel                        // human-readable fallback for history display
-          });
+            dateLabel,
+            // Store ISO string — avoids Timestamp serialization issues inside arrays
+            isoDate:   date && time ? `${date}T${time}:00` : new Date().toISOString()
+          };
+          await db.collection('users').doc(currentUser).set(
+            { accountLogs: firebase.firestore.FieldValue.arrayUnion(logEntry) },
+            { merge: true }
+          );
         }
         closeAccountModal();
         loadAccountData();
@@ -2564,30 +2569,35 @@ function setupAccountOverview() {
       if (historyList)  historyList.innerHTML = '<em style="color:var(--text-secondary)">Loading...</em>';
 
       try {
-        const snapshot = await db.collection('users').doc(currentUser)
-          .collection('accountLogs')
-          .orderBy('timestamp', 'desc')
-          .get();
+        const userDoc  = await db.collection('users').doc(currentUser).get();
+        const userData = userDoc.exists ? userDoc.data() : {};
+        const logs     = Array.isArray(userData.accountLogs) ? userData.accountLogs : [];
 
         if (!historyList) return;
         historyList.innerHTML = '';
 
-        if (snapshot.empty) {
+        if (logs.length === 0) {
           historyList.innerHTML = '<em style="color:var(--text-secondary)">No history yet.</em>';
           return;
         }
 
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const ts   = data.timestamp && data.timestamp.seconds
-            ? new Date(data.timestamp.seconds * 1000).toLocaleString()
-            : (data.timestamp instanceof Date ? data.timestamp.toLocaleString() : '—');
+        // Sort newest first
+        const sorted = [...logs].sort((a, b) => {
+          const ta = a.isoDate || a.dateLabel || '';
+          const tb = b.isoDate || b.dateLabel || '';
+          return tb.localeCompare(ta);
+        });
+
+        sorted.forEach(entry => {
+          const ts = entry.isoDate
+            ? new Date(entry.isoDate).toLocaleString()
+            : (entry.dateLabel || '—');
 
           const div = document.createElement('div');
           div.style.cssText = 'padding:0.6rem 0;border-bottom:1px solid var(--border,#333);color:var(--text-primary,#fff);';
           div.innerHTML = (
-            '<strong>' + data.type.toUpperCase() + '</strong>' +
-            ' &mdash; $' + parseFloat(data.amount).toFixed(2) +
+            '<strong>' + entry.type.toUpperCase() + '</strong>' +
+            ' &mdash; $' + parseFloat(entry.amount).toFixed(2) +
             '<br><span style="font-size:0.85em;color:var(--text-secondary,#aaa);">' + ts + '</span>'
           );
           historyList.appendChild(div);
