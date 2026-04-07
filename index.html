@@ -49,12 +49,10 @@
                 <div>Real P&amp;L: <strong>$<span id="real-pnl">0.00</span></strong></div>
               </div>
               <div class="account-actions" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
-                <input type="number" id="deposit-input" placeholder="Deposit Amount" style="padding:0.5rem;border:1px solid var(--border);border-radius:0.375rem;background:var(--bg-secondary);color:var(--text-primary);width:160px;" />
                 <button id="add-deposit-btn" class="btn btn-secondary">Add Deposit</button>
-                <input type="number" id="withdraw-input" placeholder="Withdraw Amount" style="padding:0.5rem;border:1px solid var(--border);border-radius:0.375rem;background:var(--bg-secondary);color:var(--text-primary);width:160px;" />
                 <button id="add-withdraw-btn" class="btn btn-secondary">Add Withdrawal</button>
-                <input type="number" id="balance-input" placeholder="Set Current Balance" style="padding:0.5rem;border:1px solid var(--border);border-radius:0.375rem;background:var(--bg-secondary);color:var(--text-primary);width:170px;" />
                 <button id="set-balance-btn" class="btn btn-secondary">Update Balance</button>
+                <button id="view-history-btn" class="btn btn-secondary">View History</button>
               </div>
             </div>
 
@@ -514,6 +512,29 @@
             </div>
             <div id="expand-modal-body"></div>
         </div>
+    </div>
+
+    <!-- ACCOUNT MODAL -->
+    <div id="account-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+      <div style="background:var(--bg-card,#1e2330);border-radius:0.75rem;padding:2rem;width:100%;max-width:400px;display:flex;flex-direction:column;gap:1rem;">
+        <h3 id="account-modal-title" style="margin:0;color:var(--text-primary,#fff);">Add Entry</h3>
+        <input type="number" id="modal-amount" placeholder="Amount" style="padding:0.6rem;border:1px solid var(--border,#333);border-radius:0.375rem;background:var(--bg-secondary,#111);color:var(--text-primary,#fff);font-size:1rem;" />
+        <input type="date"   id="modal-date"   style="padding:0.6rem;border:1px solid var(--border,#333);border-radius:0.375rem;background:var(--bg-secondary,#111);color:var(--text-primary,#fff);font-size:1rem;" />
+        <input type="time"   id="modal-time"   style="padding:0.6rem;border:1px solid var(--border,#333);border-radius:0.375rem;background:var(--bg-secondary,#111);color:var(--text-primary,#fff);font-size:1rem;" />
+        <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+          <button id="modal-close-btn" class="btn btn-secondary">Cancel</button>
+          <button id="modal-save-btn"  class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORY MODAL -->
+    <div id="history-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+      <div style="background:var(--bg-card,#1e2330);border-radius:0.75rem;padding:2rem;width:100%;max-width:500px;max-height:70vh;overflow-y:auto;display:flex;flex-direction:column;gap:1rem;">
+        <h3 style="margin:0;color:var(--text-primary,#fff);">Account History</h3>
+        <div id="history-list" style="display:flex;flex-direction:column;gap:0.5rem;"></div>
+        <button id="history-close-btn" class="btn btn-secondary" style="align-self:flex-end;">Close</button>
+      </div>
     </div>
 
     <!-- Firebase SDK -->
