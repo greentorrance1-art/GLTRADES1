@@ -2410,46 +2410,88 @@ function setupSettingsButtons() {
       }
     });
   }
+}
 
-  // RESET TRADES ONLY
-  const resetTradesBtn = document.getElementById('reset-trades-btn');
+// ─── Account Overview ─────────────────────────────────────────────────────────
 
-  if (resetTradesBtn) {
-    resetTradesBtn.addEventListener('click', async () => {
+async function loadAccountData() {
+  if (!currentUser) return;
+  try {
+    const logsRef = db.collection('users').doc(currentUser).collection('accountLogs');
+    const snapshot = await logsRef.get();
 
-      const confirm1 = confirm('Delete ALL trades?');
-      if (!confirm1) return;
+    let deposits = 0;
+    let withdrawals = 0;
 
-      const confirm2 = confirm('This will permanently remove all trade history.');
-      if (!confirm2) return;
-
-      try {
-        const tradesRef = db.collection('users').doc(currentUser).collection('trades');
-        const snapshot = await tradesRef.get();
-
-        const batch = db.batch();
-        snapshot.forEach(doc => {
-          batch.delete(doc.ref);
-        });
-        await batch.commit();
-
-        if (window.trades) {
-          window.trades = [];
-        }
-
-        if (typeof updateDashboard === 'function') updateDashboard();
-        if (typeof displayTrades === 'function') displayTrades();
-
-        alert('All trades deleted.');
-
-      } catch (error) {
-        console.error('Reset trades error:', error);
-        alert('Failed to delete trades.');
-      }
-
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.type === 'deposit')    deposits    += data.amount;
+      if (data.type === 'withdrawal') withdrawals += data.amount;
     });
+
+    const userDoc = await db.collection('users').doc(currentUser).get();
+    const balance = (userDoc.exists && userDoc.data().currentBalance != null)
+      ? userDoc.data().currentBalance : 0;
+
+    const realPnL = balance - deposits + withdrawals;
+
+    const el = id => document.getElementById(id);
+    if (el('total-deposits'))    el('total-deposits').textContent    = deposits.toFixed(2);
+    if (el('total-withdrawals')) el('total-withdrawals').textContent = withdrawals.toFixed(2);
+    if (el('current-balance'))   el('current-balance').textContent   = balance.toFixed(2);
+    if (el('real-pnl'))          el('real-pnl').textContent          = realPnL.toFixed(2);
+
+  } catch (err) {
+    console.error('Account load error:', err);
   }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const depositBtn  = document.getElementById('add-deposit-btn');
+  const withdrawBtn = document.getElementById('add-withdraw-btn');
+  const balanceBtn  = document.getElementById('set-balance-btn');
+
+  if (depositBtn) {
+    depositBtn.addEventListener('click', async () => {
+      const amount = parseFloat(document.getElementById('deposit-input').value);
+      if (isNaN(amount) || amount <= 0) { alert('Enter valid deposit'); return; }
+      await db.collection('users').doc(currentUser).collection('accountLogs').add({
+        type: 'deposit', amount,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      document.getElementById('deposit-input').value = '';
+      loadAccountData();
+    });
+  }
+
+  if (withdrawBtn) {
+    withdrawBtn.addEventListener('click', async () => {
+      const amount = parseFloat(document.getElementById('withdraw-input').value);
+      if (isNaN(amount) || amount <= 0) { alert('Enter valid withdrawal'); return; }
+      await db.collection('users').doc(currentUser).collection('accountLogs').add({
+        type: 'withdrawal', amount,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      document.getElementById('withdraw-input').value = '';
+      loadAccountData();
+    });
+  }
+
+  if (balanceBtn) {
+    balanceBtn.addEventListener('click', async () => {
+      const amount = parseFloat(document.getElementById('balance-input').value);
+      if (isNaN(amount)) { alert('Enter valid balance'); return; }
+      await db.collection('users').doc(currentUser).set(
+        { currentBalance: amount }, { merge: true }
+      );
+      document.getElementById('balance-input').value = '';
+      loadAccountData();
+    });
+  }
+
+  // Initial load — wait for auth to resolve
+  setTimeout(() => loadAccountData(), 500);
+});
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 function formatCurrency(val) {
