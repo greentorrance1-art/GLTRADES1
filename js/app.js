@@ -2588,18 +2588,64 @@ function setupAccountOverview() {
           return tb.localeCompare(ta);
         });
 
-        sorted.forEach(entry => {
+        sorted.forEach((entry, idx) => {
           const ts = entry.isoDate
             ? new Date(entry.isoDate).toLocaleString()
             : (entry.dateLabel || '—');
 
           const div = document.createElement('div');
-          div.style.cssText = 'padding:0.6rem 0;border-bottom:1px solid var(--border,#333);color:var(--text-primary,#fff);';
-          div.innerHTML = (
+          div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0;border-bottom:1px solid var(--border,#333);color:var(--text-primary,#fff);';
+
+          const info = document.createElement('div');
+          info.innerHTML = (
             '<strong>' + entry.type.toUpperCase() + '</strong>' +
             ' &mdash; $' + parseFloat(entry.amount).toFixed(2) +
             '<br><span style="font-size:0.85em;color:var(--text-secondary,#aaa);">' + ts + '</span>'
           );
+
+          const delBtn = document.createElement('button');
+          delBtn.textContent = '✕';
+          delBtn.style.cssText = 'background:none;border:1px solid #ef4444;color:#ef4444;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:0.85rem;flex-shrink:0;margin-left:1rem;';
+          delBtn.title = 'Delete this entry';
+
+          // Delete by removing this entry from the logs array and saving back
+          delBtn.addEventListener('click', async () => {
+            if (!confirm('Delete this entry?')) return;
+            try {
+              const freshDoc  = await db.collection('users').doc(currentUser).get();
+              const freshData = freshDoc.exists ? freshDoc.data() : {};
+              const freshLogs = Array.isArray(freshData.accountLogs) ? [...freshData.accountLogs] : [];
+
+              // Match by isoDate + type + amount (arrayRemove needs exact object match,
+              // so we find the original object and use arrayRemove with it)
+              const toRemove = freshLogs.find(l =>
+                l.type   === entry.type   &&
+                l.amount === entry.amount &&
+                (l.isoDate || '') === (entry.isoDate || '') &&
+                (l.dateLabel || '') === (entry.dateLabel || '')
+              );
+
+              if (toRemove) {
+                await db.collection('users').doc(currentUser).update({
+                  accountLogs: firebase.firestore.FieldValue.arrayRemove(toRemove)
+                });
+              }
+
+              div.remove();
+              loadAccountData();
+
+              // Show "no history" message if list is now empty
+              if (historyList && historyList.children.length === 0) {
+                historyList.innerHTML = '<em style="color:var(--text-secondary)">No history yet.</em>';
+              }
+            } catch (err) {
+              console.error('Delete entry error:', err);
+              alert('Failed to delete entry.');
+            }
+          });
+
+          div.appendChild(info);
+          div.appendChild(delBtn);
           historyList.appendChild(div);
         });
       } catch (err) {
