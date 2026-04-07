@@ -2410,6 +2410,45 @@ function setupSettingsButtons() {
       }
     });
   }
+
+  // RESET TRADES ONLY
+  const resetTradesBtn = document.getElementById('reset-trades-btn');
+
+  if (resetTradesBtn) {
+    resetTradesBtn.addEventListener('click', async () => {
+
+      const confirm1 = confirm('Delete ALL trades?');
+      if (!confirm1) return;
+
+      const confirm2 = confirm('This will permanently remove all trade history.');
+      if (!confirm2) return;
+
+      try {
+        const tradesRef = db.collection('users').doc(currentUser).collection('trades');
+        const snapshot = await tradesRef.get();
+
+        const batch = db.batch();
+        snapshot.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+
+        if (window.trades) {
+          window.trades = [];
+        }
+
+        if (typeof updateDashboard === 'function') updateDashboard();
+        if (typeof displayTrades === 'function') displayTrades();
+
+        alert('All trades deleted.');
+
+      } catch (error) {
+        console.error('Reset trades error:', error);
+        alert('Failed to delete trades.');
+      }
+
+    });
+  }
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
