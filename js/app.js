@@ -2517,12 +2517,24 @@ function setupAccountOverview() {
       const date   = modalDate ? modalDate.value : '';
       const time   = modalTime ? modalTime.value : '';
 
-      if (isNaN(amount) || !date || !time) {
-        alert('Please fill in all fields.');
+      if (isNaN(amount) || amount <= 0) {
+        alert('Please enter a valid amount.');
         return;
       }
 
-      const timestamp = new Date(`${date}T${time}`);
+      // Build a Firestore-safe timestamp.
+      // date is YYYY-MM-DD, time is HH:MM (24-hour from <input type="time">).
+      // Append seconds so Date parsing is unambiguous across all browsers.
+      let firestoreTimestamp = firebase.firestore.FieldValue.serverTimestamp();
+      let dateLabel = date || new Date().toISOString().split('T')[0];
+
+      if (date && time) {
+        const jsDate = new Date(`${date}T${time}:00`);
+        if (!isNaN(jsDate.getTime())) {
+          firestoreTimestamp = firebase.firestore.Timestamp.fromDate(jsDate);
+          dateLabel = jsDate.toLocaleString();
+        }
+      }
 
       try {
         if (currentAction === 'balance') {
@@ -2531,14 +2543,17 @@ function setupAccountOverview() {
           );
         } else {
           await db.collection('users').doc(currentUser).collection('accountLogs').add({
-            type: currentAction, amount, timestamp
+            type:      currentAction,
+            amount,
+            timestamp: firestoreTimestamp,
+            dateLabel                        // human-readable fallback for history display
           });
         }
         closeAccountModal();
         loadAccountData();
       } catch (err) {
         console.error('Account save error:', err);
-        alert('Error saving data.');
+        alert('Error saving data. Check console for details.');
       }
     });
   }
