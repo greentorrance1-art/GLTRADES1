@@ -1,4 +1,3 @@
-
 // ─── Global State ────────────────────────────────────────────────────────────
 let currentPage = 'dashboard';
 let currentUser = null;
@@ -2437,14 +2436,6 @@ function setupSettingsButtons() {
 
 // ─── Account Overview ─────────────────────────────────────────────────────────
 
-function getInputValue(id) {
-  const el = document.getElementById(id);
-  if (!el) return null;
-  const value = parseFloat(el.value);
-  if (isNaN(value)) return null;
-  return value;
-}
-
 async function loadAccountData() {
   if (!currentUser) return;
   try {
@@ -2477,54 +2468,135 @@ async function loadAccountData() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function setupAccountOverview() {
+  let currentAction = null;
+
+  // Match exact IDs in index.html
+  const accountModal    = document.getElementById('account-modal');
+  const modalTitle      = document.getElementById('account-modal-title');
+  const modalAmount     = document.getElementById('modal-amount');
+  const modalDate       = document.getElementById('modal-date');
+  const modalTime       = document.getElementById('modal-time');
+  const modalSaveBtn    = document.getElementById('modal-save-btn');
+  const modalCloseBtn   = document.getElementById('modal-close-btn');
+
+  const historyModal    = document.getElementById('history-modal');
+  const historyList     = document.getElementById('history-list');
+  const historyCloseBtn = document.getElementById('history-close-btn');
+
   const depositBtn  = document.getElementById('add-deposit-btn');
   const withdrawBtn = document.getElementById('add-withdraw-btn');
   const balanceBtn  = document.getElementById('set-balance-btn');
+  const historyBtn  = document.getElementById('view-history-btn');
 
-  // ── FIX 2: Deposit ─────────────────────────────────────────────────────────
-  if (depositBtn) {
-    depositBtn.addEventListener('click', async () => {
-      const amount = getInputValue('deposit-input');
-      if (amount === null) return;
-      await db.collection('users').doc(currentUser).collection('accountLogs').add({
-        type: 'deposit', amount,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      document.getElementById('deposit-input').value = '';
-      loadAccountData();
+  function openAccountModal(type) {
+    currentAction = type;
+    if (modalAmount) modalAmount.value = '';
+    if (modalDate)   modalDate.value   = '';
+    if (modalTime)   modalTime.value   = '';
+    if (modalTitle) {
+      if (type === 'deposit')    modalTitle.textContent = 'Add Deposit';
+      if (type === 'withdrawal') modalTitle.textContent = 'Add Withdrawal';
+      if (type === 'balance')    modalTitle.textContent = 'Update Balance';
+    }
+    if (accountModal) accountModal.style.display = 'flex';
+  }
+
+  function closeAccountModal() {
+    if (accountModal) accountModal.style.display = 'none';
+  }
+
+  if (depositBtn)    depositBtn.addEventListener('click',  () => openAccountModal('deposit'));
+  if (withdrawBtn)   withdrawBtn.addEventListener('click', () => openAccountModal('withdrawal'));
+  if (balanceBtn)    balanceBtn.addEventListener('click',  () => openAccountModal('balance'));
+  if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeAccountModal);
+
+  if (modalSaveBtn) {
+    modalSaveBtn.addEventListener('click', async () => {
+      const amount = parseFloat(modalAmount ? modalAmount.value : '');
+      const date   = modalDate ? modalDate.value : '';
+      const time   = modalTime ? modalTime.value : '';
+
+      if (isNaN(amount) || !date || !time) {
+        alert('Please fill in all fields.');
+        return;
+      }
+
+      const timestamp = new Date(`${date}T${time}`);
+
+      try {
+        if (currentAction === 'balance') {
+          await db.collection('users').doc(currentUser).set(
+            { currentBalance: amount }, { merge: true }
+          );
+        } else {
+          await db.collection('users').doc(currentUser).collection('accountLogs').add({
+            type: currentAction, amount, timestamp
+          });
+        }
+        closeAccountModal();
+        loadAccountData();
+      } catch (err) {
+        console.error('Account save error:', err);
+        alert('Error saving data.');
+      }
     });
   }
 
-  // ── FIX 2: Withdrawal ──────────────────────────────────────────────────────
-  if (withdrawBtn) {
-    withdrawBtn.addEventListener('click', async () => {
-      const amount = getInputValue('withdraw-input');
-      if (amount === null) return;
-      await db.collection('users').doc(currentUser).collection('accountLogs').add({
-        type: 'withdrawal', amount,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      document.getElementById('withdraw-input').value = '';
-      loadAccountData();
+  if (historyBtn) {
+    historyBtn.addEventListener('click', async () => {
+      if (historyModal) historyModal.style.display = 'flex';
+      if (historyList)  historyList.innerHTML = '<em style="color:var(--text-secondary)">Loading...</em>';
+
+      try {
+        const snapshot = await db.collection('users').doc(currentUser)
+          .collection('accountLogs')
+          .orderBy('timestamp', 'desc')
+          .get();
+
+        if (!historyList) return;
+        historyList.innerHTML = '';
+
+        if (snapshot.empty) {
+          historyList.innerHTML = '<em style="color:var(--text-secondary)">No history yet.</em>';
+          return;
+        }
+
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const ts   = data.timestamp && data.timestamp.seconds
+            ? new Date(data.timestamp.seconds * 1000).toLocaleString()
+            : (data.timestamp instanceof Date ? data.timestamp.toLocaleString() : '—');
+
+          const div = document.createElement('div');
+          div.style.cssText = 'padding:0.6rem 0;border-bottom:1px solid var(--border,#333);color:var(--text-primary,#fff);';
+          div.innerHTML = (
+            '<strong>' + data.type.toUpperCase() + '</strong>' +
+            ' &mdash; $' + parseFloat(data.amount).toFixed(2) +
+            '<br><span style="font-size:0.85em;color:var(--text-secondary,#aaa);">' + ts + '</span>'
+          );
+          historyList.appendChild(div);
+        });
+      } catch (err) {
+        console.error('History load error:', err);
+        if (historyList) historyList.innerHTML = '<em>Error loading history.</em>';
+      }
     });
   }
 
-  // ── FIX 2: Balance ─────────────────────────────────────────────────────────
-  if (balanceBtn) {
-    balanceBtn.addEventListener('click', async () => {
-      const amount = getInputValue('balance-input');
-      if (amount === null) return;
-      await db.collection('users').doc(currentUser).set(
-        { currentBalance: amount }, { merge: true }
-      );
-      document.getElementById('balance-input').value = '';
-      loadAccountData();
+  if (historyCloseBtn) {
+    historyCloseBtn.addEventListener('click', () => {
+      if (historyModal) historyModal.style.display = 'none';
     });
   }
 
-  // Initial load after auth resolves
-  setTimeout(() => loadAccountData(), 500);
+  loadAccountData();
+}
+
+// Called from initializeApp() after auth resolves and DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  // Delay to let initializeApp set currentUser before we query Firestore
+  setTimeout(() => setupAccountOverview(), 800);
 });
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
