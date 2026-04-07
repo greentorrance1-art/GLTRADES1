@@ -109,7 +109,7 @@ async function loadAllData() {
       userDocRef.collection('journal').orderBy('date', 'desc').get(),
       userDocRef.get()
     ]);
-    window.trades = tradesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    window.trades = tradesSnap.docs.map(d => normalizeTrade({ id: d.id, ...d.data() }));
     window.playbooks = playbooksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     window.journalEntries = journalSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
@@ -166,6 +166,131 @@ function showPage(page) {
       console.log('❌ User is NOT admin - skipping admin controls');
     }
   }
+}
+
+
+// ─── Trading Engine: P&L Calculation ─────────────────────────────────────────
+//
+// Single source of truth for all P&L math across the application.
+// Works from executions[] when present; falls back to legacy entryPrice/exitPrice.
+// Handles: scaling in, scaling out, partial closes, multiple entries/exits.
+
+const FUTURES_MULTIPLIERS = { MNQ: 2, NQ: 20, MES: 5, ES: 50, CL: 1000 };
+
+function getFuturesMultiplier(symbol) {
+  if (!symbol) return 1;
+  const s = symbol.toUpperCase();
+  for (const [key, val] of Object.entries(FUTURES_MULTIPLIERS)) {
+    if (s.startsWith(key)) return val;
+  }
+  return 1;
+}
+
+/**
+ * calculateTradePL(trade)
+ * Returns { pl, entryPrice, exitPrice, quantity, openQuantity }
+ * Commission default: $2.00/contract/side (round-trip = qty * $4.00)
+ * Override per-trade via trade.commissionPerSide
+ */
+function calculateTradePL(trade) {
+  const multiplier        = getFuturesMultiplier(trade.symbol);
+  const commissionPerSide = (trade.commissionPerSide != null) ? trade.commissionPerSide : 2.00;
+  const side              = (trade.side || 'long').toLowerCase();
+
+  // -- Execution-based path --------------------------------------------------
+  const execs = Array.isArray(trade.executions) && trade.executions.length > 0
+    ? trade.executions : null;
+
+  if (execs) {
+    const entries = execs
+      .filter(e => e.type === 'entry')
+      .sort((a, b) => (a.timestamp || '') < (b.timestamp || '') ? -1 : 1);
+    const exits = execs
+      .filter(e => e.type === 'exit')
+      .sort((a, b) => (a.timestamp || '') < (b.timestamp || '') ? -1 : 1);
+
+    // Work on a copy so we never mutate the stored executions
+    const entryQueue = entries.map(e => ({ price: e.price, qty: e.quantity || e.qty || 0 }));
+
+    let realizedPL       = 0;
+    let totalEntryQty    = 0;
+    let weightedEntrySum = 0;
+    let totalExitQty     = 0;
+    let weightedExitSum  = 0;
+
+    for (const exit of exits) {
+      let remaining = exit.quantity || exit.qty || 0;
+      totalExitQty    += remaining;
+      weightedExitSum += exit.price * remaining;
+
+      while (remaining > 0 && entryQueue.length > 0) {
+        const head    = entryQueue[0];
+        const matched = Math.min(head.qty, remaining);
+
+        const rawPL = side === 'long'
+          ? (exit.price - head.price) * matched * multiplier
+          : (head.price - exit.price) * matched * multiplier;
+
+        // Round-trip commission on matched qty only
+        realizedPL += rawPL - (matched * commissionPerSide * 2);
+
+        head.qty  -= matched;
+        remaining -= matched;
+        if (head.qty <= 0) entryQueue.shift();
+      }
+    }
+
+    for (const e of entries) {
+      const q = e.quantity || e.qty || 0;
+      totalEntryQty    += q;
+      weightedEntrySum += e.price * q;
+    }
+
+    return {
+      pl:          parseFloat(realizedPL.toFixed(2)),
+      entryPrice:  parseFloat((totalEntryQty > 0 ? weightedEntrySum / totalEntryQty : 0).toFixed(2)),
+      exitPrice:   parseFloat((totalExitQty  > 0 ? weightedExitSum  / totalExitQty  : 0).toFixed(2)),
+      quantity:    totalEntryQty,
+      openQuantity: Math.max(0, totalEntryQty - totalExitQty)
+    };
+  }
+
+  // -- Legacy entryPrice / exitPrice fallback --------------------------------
+  const entryPrice = parseFloat(trade.entryPrice) || 0;
+  const exitPrice  = parseFloat(trade.exitPrice)  || 0;
+  const quantity   = parseFloat(trade.quantity)   || 0;
+  const rawPL      = side === 'long'
+    ? (exitPrice - entryPrice) * quantity * multiplier
+    : (entryPrice - exitPrice) * quantity * multiplier;
+
+  return {
+    pl:          parseFloat((rawPL - (quantity * commissionPerSide * 2)).toFixed(2)),
+    entryPrice,
+    exitPrice,
+    quantity,
+    openQuantity: 0
+  };
+}
+
+/**
+ * normalizeTrade(trade)
+ * Enriches any trade object (old or new) with recalculated derived fields.
+ * Safe to call repeatedly — does NOT write to Firestore.
+ */
+function normalizeTrade(trade) {
+  const calc  = calculateTradePL(trade);
+  let outcome = 'breakeven';
+  if (calc.pl > 0) outcome = 'win';
+  else if (calc.pl < 0) outcome = 'loss';
+  return {
+    ...trade,
+    pl:           calc.pl,
+    entryPrice:   calc.entryPrice,
+    exitPrice:    calc.exitPrice,
+    quantity:     calc.quantity,
+    openQuantity: calc.openQuantity,
+    outcome
+  };
 }
 
 // ─── Trade Modal ──────────────────────────────────────────────────────────────
@@ -234,60 +359,63 @@ async function saveTrade() {
 
   try {
     const entryPrice = parseFloat(document.getElementById('trade-entry').value);
-    const exitPrice = parseFloat(document.getElementById('trade-exit').value);
-    const quantity = parseFloat(document.getElementById('trade-quantity').value);
-    const side = document.getElementById('trade-side').value;
-    const stopLoss = parseFloat(document.getElementById('trade-stop').value) || null;
-    const tagsRaw = document.getElementById('trade-tags').value;
-    const symbol = document.getElementById('trade-symbol').value.toUpperCase().trim();
+    const exitPrice  = parseFloat(document.getElementById('trade-exit').value);
+    const quantity   = parseFloat(document.getElementById('trade-quantity').value);
+    const side       = document.getElementById('trade-side').value;
+    const stopLoss   = parseFloat(document.getElementById('trade-stop').value) || null;
+    const tagsRaw    = document.getElementById('trade-tags').value;
+    const symbol     = document.getElementById('trade-symbol').value.toUpperCase().trim();
+    const entryTime  = document.getElementById('trade-entry-time').value || null;
+    const exitTime   = document.getElementById('trade-exit-time').value || null;
+    const date       = document.getElementById('trade-date').value;
 
-    // Futures multipliers
-    const futuresMultipliers = {
-      'MNQ': 2,
-      'NQ': 20,
-      'MES': 5,
-      'ES': 50,
-      'CL': 1000
-    };
+    // Build executions[] from the form inputs so this trade is engine-compatible.
+    // entryTime/exitTime are HH:MM:SS strings; combine with date for a full timestamp.
+    const entryTimestamp = entryTime ? date + 'T' + entryTime : null;
+    const exitTimestamp  = exitTime  ? date + 'T' + exitTime  : null;
 
-    const multiplier = futuresMultipliers[symbol] || 1;
-
-    // P/L calculation
-    let pl = 0;
-    if (side === 'long') {
-      pl = (exitPrice - entryPrice) * quantity * multiplier;
-    } else {
-      pl = (entryPrice - exitPrice) * quantity * multiplier;
+    const executions = [];
+    if (!isNaN(entryPrice) && !isNaN(quantity)) {
+      executions.push({ type: 'entry', price: entryPrice, quantity, timestamp: entryTimestamp });
+    }
+    if (!isNaN(exitPrice) && !isNaN(quantity)) {
+      executions.push({ type: 'exit',  price: exitPrice,  quantity, timestamp: exitTimestamp });
     }
 
-    // R-multiple
+    // Run through the canonical P&L engine
+    const calc     = calculateTradePL({ symbol, side, executions, commissionPerSide: 2.00 });
+    const pl       = calc.pl;
+    const multiplier = getFuturesMultiplier(symbol);
+
+    // R-multiple (uses avg entry from engine)
     let rMultiple = null;
-    if (stopLoss) {
-      const risk = Math.abs(entryPrice - stopLoss) * quantity * multiplier;
+    if (stopLoss && calc.quantity > 0) {
+      const risk = Math.abs(calc.entryPrice - stopLoss) * calc.quantity * multiplier;
       rMultiple = risk > 0 ? parseFloat((pl / risk).toFixed(2)) : null;
     }
 
-    // Outcome
     let outcome = 'breakeven';
     if (pl > 0) outcome = 'win';
     else if (pl < 0) outcome = 'loss';
 
     const tradeData = {
-      date: document.getElementById('trade-date').value,
-      entryTime: document.getElementById('trade-entry-time').value || null,
-      exitTime: document.getElementById('trade-exit-time').value || null,
-      symbol: symbol,
+      date,
+      entryTime,
+      exitTime,
+      symbol,
       side,
-      quantity,
-      entryPrice,
-      exitPrice,
+      // Keep legacy scalar fields for backward compat with older Firestore docs
+      quantity:   calc.quantity,
+      entryPrice: calc.entryPrice,
+      exitPrice:  calc.exitPrice,
       stopLoss,
-      pl: parseFloat(pl.toFixed(2)),
+      pl,
       rMultiple,
       outcome,
+      executions,   // execution array — drives all future P&L recalculations
       strategy: document.getElementById('trade-strategy').value,
-      tags: tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [],
-      notes: document.getElementById('trade-notes').value.trim(),
+      tags:     tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [],
+      notes:    document.getElementById('trade-notes').value.trim(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
@@ -296,16 +424,15 @@ async function saveTrade() {
     if (editingTradeId) {
       await userTradesRef.doc(editingTradeId).update(tradeData);
       const idx = window.trades.findIndex(t => t.id === editingTradeId);
-      if (idx !== -1) window.trades[idx] = { id: editingTradeId, ...tradeData };
+      if (idx !== -1) window.trades[idx] = normalizeTrade({ id: editingTradeId, ...tradeData });
     } else {
       tradeData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
       const docRef = await userTradesRef.add(tradeData);
-      window.trades.unshift({ id: docRef.id, ...tradeData });
+      window.trades.unshift(normalizeTrade({ id: docRef.id, ...tradeData }));
     }
 
     closeTradeModal();
 
-    // Refresh current view
     if (currentPage === 'dashboard') updateDashboard();
     if (currentPage === 'trades') displayTrades();
 
@@ -1859,6 +1986,68 @@ function applyWidgetHeight(height) {
   }
 }
 
+// ─── CSV Import Helpers ────────────────────────────────────────────────────────
+
+function _csvParseTime(timeStr) {
+  if (!timeStr) return null;
+  try {
+    const parts = timeStr.trim().split(' ');
+    if (parts.length !== 2) return null;
+    const dateParts = parts[0].split('/');
+    const timeParts = parts[1].split(':');
+    if (dateParts.length !== 3 || timeParts.length !== 3) return null;
+    return `${dateParts[2]}-${dateParts[0].padStart(2,'0')}-${dateParts[1].padStart(2,'0')}T${timeParts[0].padStart(2,'0')}:${timeParts[1].padStart(2,'0')}:${timeParts[2].padStart(2,'0')}`;
+  } catch { return null; }
+}
+
+function _csvFuturesMultiplier(symbol) {
+  // Delegates to the canonical engine function
+  return getFuturesMultiplier(symbol) || 2;
+}
+
+function _csvBuildTradeObject(symbol, side, entryPrice, exitPrice, qty, entryISO, exitISO, executions) {
+  // Build canonical executions array if caller didn't provide one
+  const execs = (executions && executions.length > 0) ? executions : [
+    { type: 'entry', price: entryPrice, quantity: qty, timestamp: entryISO },
+    { type: 'exit',  price: exitPrice,  quantity: qty, timestamp: exitISO  }
+  ];
+
+  // Run through the canonical engine — single source of truth for all P&L math
+  const draft = { symbol, side, executions: execs, commissionPerSide: 2.00 };
+  const calc  = calculateTradePL(draft);
+  const pl    = calc.pl;
+  const commission = qty * 2.00 * 2; // for notes display only
+
+  const date      = entryISO ? entryISO.split('T')[0] : new Date().toISOString().split('T')[0];
+  const entryTime = entryISO ? entryISO.split('T')[1] : null;
+  const exitTime  = exitISO  ? exitISO.split('T')[1]  : null;
+
+  let outcome = 'breakeven';
+  if (pl > 0) outcome = 'win';
+  else if (pl < 0) outcome = 'loss';
+
+  return {
+    date,
+    entryTime,
+    exitTime,
+    symbol,
+    side,
+    quantity:   calc.quantity,
+    entryPrice: calc.entryPrice,
+    exitPrice:  calc.exitPrice,
+    stopLoss:   null,
+    pl,
+    rMultiple:  null,
+    outcome,
+    executions: execs,
+    strategy:   'CSV Import',
+    tags:       ['imported'],
+    notes:      `Imported from Tradovate CSV ($${commission.toFixed(2)} commission) on ${new Date().toISOString().split('T')[0]}`
+  };
+}
+
+// ─── Main Import Function ──────────────────────────────────────────────────────
+
 async function importTradesFromCSV(csvText) {
   try {
     // Parse CSV
@@ -1885,297 +2074,184 @@ async function importTradesFromCSV(csvText) {
       return;
     }
 
-    // Parse times (format: "12/01/2025 08:48:29") → ISO string
-    const parseTime = (timeStr) => {
-      if (!timeStr) return null;
-      try {
-        const parts = timeStr.split(' ');
-        if (parts.length !== 2) return null;
-
-        const dateParts = parts[0].split('/');
-        const timeParts = parts[1].split(':');
-
-        if (dateParts.length !== 3 || timeParts.length !== 3) return null;
-
-        const month  = dateParts[0].padStart(2, '0');
-        const day    = dateParts[1].padStart(2, '0');
-        const year   = dateParts[2];
-        const hour   = timeParts[0].padStart(2, '0');
-        const minute = timeParts[1].padStart(2, '0');
-        const second = timeParts[2].padStart(2, '0');
-
-        return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
-      } catch {
-        return null;
-      }
-    };
-
-    // Step 1: Parse all execution rows into fills
-    const allFills = [];
+    // ── Step 1: Parse all raw execution rows ──────────────────────────────────
+    const rawRows = [];
     for (let i = 1; i < lines.length; i++) {
       const row = lines[i].split(',').map(cell => cell.trim());
-
       if (row.length < header.length) {
-        console.warn(`Skipping row ${i + 1}: insufficient columns`);
+        console.warn(`CSV row ${i + 1}: insufficient columns, skipping`);
+        continue;
+      }
+      try {
+        const symbol          = row[symbolIdx];
+        const qty             = parseFloat(row[qtyIdx]);
+        const buyPrice        = parseFloat(row[buyPriceIdx]);
+        const sellPrice       = parseFloat(row[sellPriceIdx]);
+        const boughtTimestamp = buyTimeIdx  >= 0 ? row[buyTimeIdx]  : null;
+        const soldTimestamp   = sellTimeIdx >= 0 ? row[sellTimeIdx] : null;
+
+        if (!symbol || isNaN(qty) || qty <= 0) {
+          console.warn(`CSV row ${i + 1}: invalid symbol or qty, skipping`);
+          continue;
+        }
+
+        const hasBuy  = !isNaN(buyPrice)  && buyPrice  > 0;
+        const hasSell = !isNaN(sellPrice) && sellPrice > 0;
+
+        rawRows.push({ symbol, qty, buyPrice, sellPrice, boughtTimestamp, soldTimestamp, hasBuy, hasSell, rowNum: i + 1 });
+      } catch (err) {
+        console.error(`CSV row ${i + 1}: parse error`, err);
+      }
+    }
+
+    // ── Step 2: Execution-level trade pairing ─────────────────────────────────
+    //
+    // Rule: 1 BUY + 1 SELL = 1 trade. No FIFO. No position merging.
+    //
+    // Tradovate rows come in two shapes:
+    //   A) Both buyPrice + sellPrice present  → self-contained long round-trip
+    //   B) Only buyPrice present              → pending long entry
+    //   C) Only sellPrice present             → closes most-recent pending long entry
+    //
+    // Reversal detection: if a pending entry exists and we see another buy-only
+    // row before the first is closed, treat prior pending as a standalone entry
+    // warning (data gap) and start fresh — prevents silent merging.
+
+    const completedTrades = []; // raw trade objects before saving
+    // pendingEntries: stack keyed by symbol, each item = { price, qty, entryISO, executions[] }
+    const pendingBySymbol = {};
+
+    for (const row of rawRows) {
+      const { symbol, qty, buyPrice, sellPrice, boughtTimestamp, soldTimestamp, hasBuy, hasSell, rowNum } = row;
+
+      if (!pendingBySymbol[symbol]) pendingBySymbol[symbol] = [];
+      const pending = pendingBySymbol[symbol];
+
+      // ── Shape A: self-contained round-trip (buyPrice + sellPrice both present)
+      if (hasBuy && hasSell) {
+        const entryISO = _csvParseTime(boughtTimestamp);
+        const exitISO  = _csvParseTime(soldTimestamp);
+        const executions = [
+          { price: buyPrice,  qty, timestamp: entryISO, type: 'entry' },
+          { price: sellPrice, qty, timestamp: exitISO,  type: 'exit'  }
+        ];
+        completedTrades.push(
+          _csvBuildTradeObject(symbol, 'long', buyPrice, sellPrice, qty, entryISO, exitISO, executions)
+        );
         continue;
       }
 
-      try {
-        const symbol           = row[symbolIdx];
-        const qty              = parseFloat(row[qtyIdx]);
-        const buyPrice         = parseFloat(row[buyPriceIdx]);
-        const sellPrice        = parseFloat(row[sellPriceIdx]);
-        const boughtTimestamp  = buyTimeIdx >= 0 ? row[buyTimeIdx] : null;
-        const soldTimestamp    = sellTimeIdx >= 0 ? row[sellTimeIdx] : null;
+      // ── Shape B: buy-only → store as pending entry
+      if (hasBuy && !hasSell) {
+        const entryISO = _csvParseTime(boughtTimestamp);
+        pending.push({
+          price:      buyPrice,
+          qty,
+          entryISO,
+          executions: [{ price: buyPrice, qty, timestamp: entryISO, type: 'entry' }]
+        });
+        continue;
+      }
 
-        if (!symbol || isNaN(qty) || qty <= 0) continue;
+      // ── Shape C: sell-only → pair with most-recent pending entry (local match)
+      if (hasSell && !hasBuy) {
+        const exitISO = _csvParseTime(soldTimestamp);
 
-        allFills.push({ symbol, qty, buyPrice, sellPrice, boughtTimestamp, soldTimestamp });
-      } catch (err) {
-        console.error(`Error parsing row ${i + 1}:`, err);
+        if (pending.length === 0) {
+          // No pending entry — treat as short entry awaiting a buy-to-close.
+          // Store as pending short so it can pair with the next buy-only row.
+          console.warn(`CSV row ${rowNum}: sell-only with no pending entry for ${symbol} — storing as pending short`);
+          pending.push({
+            price:      sellPrice,
+            qty,
+            entryISO:   exitISO, // for a short, "entry" is the sell timestamp
+            side:       'short',
+            executions: [{ price: sellPrice, qty, timestamp: exitISO, type: 'entry' }]
+          });
+          continue;
+        }
+
+        // Match against the most-recent pending entry (local pairing, not global FIFO)
+        const entry = pending.pop();
+
+        if (entry.side === 'short') {
+          // Closing a short: entry was a sell, exit is a buy
+          const executions = [
+            ...entry.executions,
+            { price: sellPrice, qty, timestamp: exitISO, type: 'exit' }
+          ];
+          completedTrades.push(
+            _csvBuildTradeObject(symbol, 'short', entry.price, sellPrice, Math.min(entry.qty, qty), entry.entryISO, exitISO, executions)
+          );
+        } else {
+          // Closing a long: entry was a buy, exit is this sell
+          const executions = [
+            ...entry.executions,
+            { price: sellPrice, qty, timestamp: exitISO, type: 'exit' }
+          ];
+          completedTrades.push(
+            _csvBuildTradeObject(symbol, 'long', entry.price, sellPrice, Math.min(entry.qty, qty), entry.entryISO, exitISO, executions)
+          );
+        }
+
+        // If partial fill: entry had more qty than exit, push remainder back
+        const remainder = entry.qty - qty;
+        if (remainder > 0) {
+          pending.push({
+            price:      entry.price,
+            qty:        remainder,
+            entryISO:   entry.entryISO,
+            side:       entry.side,
+            executions: entry.executions
+          });
+        }
+        continue;
+      }
+
+      console.warn(`CSV row ${rowNum}: row has neither buyPrice nor sellPrice, skipping`);
+    }
+
+    // Warn about any unclosed pending entries (open positions / data gap)
+    for (const [symbol, pending] of Object.entries(pendingBySymbol)) {
+      for (const p of pending) {
+        console.warn(`CSV import: unclosed ${p.side || 'long'} entry for ${symbol} at ${p.entryISO} (qty ${p.qty}) — no matching exit found`);
       }
     }
 
-    // Step 2: Group fills by symbol, then run FIFO position reconstruction per symbol
-    const fillsBySymbol = {};
-    for (const fill of allFills) {
-      if (!fillsBySymbol[fill.symbol]) fillsBySymbol[fill.symbol] = [];
-      fillsBySymbol[fill.symbol].push(fill);
-    }
-
-    // Step 3: FIFO position-based trade reconstruction
-    const commissionPerContract = 2.00; // per side, so round-trip = 2x
-    const reconstructedTrades = [];
-
-    for (const [symbol, fills] of Object.entries(fillsBySymbol)) {
-      // Sort all fills by boughtTimestamp ascending
-      fills.sort((a, b) => {
-        const ta = parseTime(a.boughtTimestamp) || '';
-        const tb = parseTime(b.boughtTimestamp) || '';
-        return ta < tb ? -1 : ta > tb ? 1 : 0;
-      });
-
-      let position  = 0;
-      let entryQueue = []; // { price, qty, timestamp }
-      // Active trade accumulator (reset when position hits 0)
-      let activeTrade = null;
-
-      const finalizeAndReset = () => {
-        if (activeTrade && activeTrade.exitQty > 0) {
-          reconstructedTrades.push(activeTrade);
-        }
-        activeTrade = null;
-        entryQueue  = [];
-        position    = 0;
-      };
-
-      for (const fill of fills) {
-        const isBuy  = !isNaN(fill.buyPrice)  && fill.buyPrice  > 0;
-        const isSell = !isNaN(fill.sellPrice) && fill.sellPrice > 0;
-
-        if (isBuy && isSell) {
-          // Row has both prices — Tradovate round-trip row (one entry + one exit in same row)
-          // Treat as: BUY first, then immediately SELL
-          // Handle as a self-contained trade if position is currently 0
-          const entryISO = parseTime(fill.boughtTimestamp);
-          const exitISO  = parseTime(fill.soldTimestamp);
-          const qty      = fill.qty;
-
-          if (position === 0) {
-            // Self-contained long trade
-            const pnl       = (fill.sellPrice - fill.buyPrice) * 2 * qty;
-            const commission = qty * commissionPerContract * 2;
-            const netPnL    = pnl - commission;
-
-            reconstructedTrades.push({
-              symbol,
-              side: 'long',
-              quantity: qty,
-              entryISO,
-              exitISO,
-              entryPrice: fill.buyPrice,
-              exitPrice: fill.sellPrice,
-              netPnL
-            });
-          } else {
-            // Mid-position row — add as entry then exit
-            entryQueue.push({ price: fill.buyPrice, qty, timestamp: entryISO });
-            position += qty;
-
-            if (!activeTrade) {
-              activeTrade = {
-                symbol,
-                side: 'long',
-                entryISO,
-                exitISO: null,
-                entryQty: 0,
-                exitQty: 0,
-                weightedEntry: 0,
-                weightedExit: 0,
-                netPnL: 0
-              };
-            }
-            activeTrade.entryQty      += qty;
-            activeTrade.weightedEntry += fill.buyPrice * qty;
-
-            // Now process sell side
-            let remaining = qty;
-            while (remaining > 0 && entryQueue.length > 0) {
-              const head      = entryQueue[0];
-              const matched   = Math.min(head.qty, remaining);
-              const pnl       = (fill.sellPrice - head.price) * 2 * matched;
-              const commission = matched * commissionPerContract * 2;
-
-              activeTrade.weightedExit += fill.sellPrice * matched;
-              activeTrade.exitQty      += matched;
-              activeTrade.netPnL       += pnl - commission;
-              if (!activeTrade.exitISO) activeTrade.exitISO = exitISO;
-
-              head.qty  -= matched;
-              remaining -= matched;
-              position  -= matched;
-
-              if (head.qty <= 0) entryQueue.shift();
-            }
-
-            if (position === 0) finalizeAndReset();
-          }
-          continue;
-        }
-
-        if (isBuy && !isSell) {
-          // Pure BUY fill — add to entry queue
-          const entryISO = parseTime(fill.boughtTimestamp);
-
-          entryQueue.push({ price: fill.buyPrice, qty: fill.qty, timestamp: entryISO });
-          position += fill.qty;
-
-          if (!activeTrade) {
-            activeTrade = {
-              symbol,
-              side: 'long',
-              entryISO,
-              exitISO: null,
-              entryQty: 0,
-              exitQty: 0,
-              weightedEntry: 0,
-              weightedExit: 0,
-              netPnL: 0
-            };
-          }
-          activeTrade.entryQty      += fill.qty;
-          activeTrade.weightedEntry += fill.buyPrice * fill.qty;
-          continue;
-        }
-
-        if (isSell && !isBuy) {
-          // Pure SELL fill — match against entryQueue via FIFO
-          const exitISO  = parseTime(fill.soldTimestamp);
-          let remaining  = fill.qty;
-
-          if (!activeTrade) {
-            // Orphan sell (short entry or data gap) — skip gracefully
-            console.warn(`Orphan sell fill for ${symbol} at ${exitISO}, skipping`);
-            continue;
-          }
-
-          while (remaining > 0 && entryQueue.length > 0) {
-            const head      = entryQueue[0];
-            const matched   = Math.min(head.qty, remaining);
-            const pnl       = (fill.sellPrice - head.price) * 2 * matched;
-            const commission = matched * commissionPerContract * 2;
-
-            activeTrade.weightedExit += fill.sellPrice * matched;
-            activeTrade.exitQty      += matched;
-            activeTrade.netPnL       += pnl - commission;
-            if (!activeTrade.exitISO) activeTrade.exitISO = exitISO;
-
-            head.qty  -= matched;
-            remaining -= matched;
-            position  -= matched;
-
-            if (head.qty <= 0) entryQueue.shift();
-          }
-
-          if (position === 0) finalizeAndReset();
-          continue;
-        }
-      } // end fills loop
-
-      // Flush any open position that never hit zero (incomplete data)
-      if (activeTrade && activeTrade.exitQty > 0) {
-        reconstructedTrades.push(activeTrade);
-      }
-    } // end symbol loop
-
-    // Step 4: Save reconstructed trades (with duplicate check)
+    // ── Step 3: Deduplicate and save ─────────────────────────────────────────
     let imported = 0;
     let skipped  = 0;
     let errors   = 0;
 
-    for (const t of reconstructedTrades) {
-      await new Promise(resolve => setTimeout(resolve, 0)); // yield to UI
+    for (const t of completedTrades) {
+      await new Promise(resolve => setTimeout(resolve, 0)); // yield to UI thread
 
       try {
-        const avgEntry = t.entryQty > 0 ? parseFloat((t.weightedEntry / t.entryQty).toFixed(2)) : 0;
-        const avgExit  = t.exitQty  > 0 ? parseFloat((t.weightedExit  / t.exitQty).toFixed(2))  : 0;
-        const qty      = t.exitQty;
-        const netPnL   = parseFloat(t.netPnL.toFixed(2));
-
-        const entryISOStr = t.entryISO || null;
-        const exitISOStr  = t.exitISO  || null;
-        const tradeDate   = entryISOStr ? entryISOStr.split('T')[0] : new Date().toISOString().split('T')[0];
-        const entryTime   = entryISOStr ? entryISOStr.split('T')[1] : null;
-        const exitTime    = exitISOStr  ? exitISOStr.split('T')[1]  : null;
-
-        // Duplicate check: match on all key identifiers
+        // Duplicate check: all key fields must match
         const isDuplicate = window.trades.some(existing =>
-          existing.symbol     === t.symbol &&
-          existing.entryPrice === avgEntry  &&
-          existing.exitPrice  === avgExit   &&
-          existing.quantity   === qty       &&
-          existing.date       === tradeDate &&
-          existing.entryTime  === entryTime &&
-          existing.exitTime   === exitTime
+          existing.symbol     === t.symbol     &&
+          existing.entryPrice === t.entryPrice &&
+          existing.exitPrice  === t.exitPrice  &&
+          existing.quantity   === t.quantity   &&
+          existing.date       === t.date       &&
+          existing.entryTime  === t.entryTime  &&
+          existing.exitTime   === t.exitTime
         );
 
         if (isDuplicate) {
-          console.log(`Skipping duplicate: ${t.symbol} ${tradeDate} entry=${avgEntry} exit=${avgExit}`);
+          console.log(`Skipping duplicate: ${t.symbol} ${t.date} entry=${t.entryPrice} exit=${t.exitPrice}`);
           skipped++;
           continue;
         }
 
-        let outcome = 'breakeven';
-        if (netPnL > 0) outcome = 'win';
-        else if (netPnL < 0) outcome = 'loss';
-
-        const commission = parseFloat((qty * commissionPerContract * 2).toFixed(2));
-
-        const tradeData = {
-          date:       tradeDate,
-          entryTime:  entryTime,
-          exitTime:   exitTime,
-          symbol:     t.symbol,
-          side:       t.side,
-          quantity:   qty,
-          entryPrice: avgEntry,
-          exitPrice:  avgExit,
-          stopLoss:   null,
-          pl:         netPnL,
-          rMultiple:  null,
-          outcome:    outcome,
-          strategy:   'CSV Import',
-          tags:       ['imported'],
-          notes:      `Imported from Tradovate CSV ($${commission.toFixed(2)} commission) on ${new Date().toISOString().split('T')[0]}`,
-          createdAt:  firebase.firestore.FieldValue.serverTimestamp()
-        };
+        const tradeData = { ...t, createdAt: firebase.firestore.FieldValue.serverTimestamp() };
 
         const docRef = await db.collection('users').doc(currentUser).collection('trades').add(tradeData);
         window.trades.unshift({ id: docRef.id, ...tradeData });
         imported++;
 
       } catch (err) {
-        console.error('Error saving reconstructed trade:', err);
+        console.error('Error saving trade:', err);
         errors++;
       }
     }
