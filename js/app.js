@@ -186,15 +186,31 @@ function getFuturesMultiplier(symbol) {
   return 1;
 }
 
+// Fallback commission rate ($/contract/side) used only when no user setting
+// and no per-trade override is present. Configurable rate lives in
+// window.userSettings.commissionPerSide (see Settings > Trading Costs).
+const DEFAULT_COMMISSION_PER_SIDE = 2.00;
+
+/**
+ * getCommissionRate()
+ * Single source of truth for "what commission rate should new/recalculated
+ * trades use." Checks user settings first, then falls back to the default.
+ */
+function getCommissionRate() {
+  const fromSettings = window.userSettings && window.userSettings.commissionPerSide;
+  const rate = parseFloat(fromSettings);
+  return !isNaN(rate) && rate >= 0 ? rate : DEFAULT_COMMISSION_PER_SIDE;
+}
+
 /**
  * calculateTradePL(trade)
- * Returns { pl, entryPrice, exitPrice, quantity, openQuantity }
- * Commission default: $2.00/contract/side (round-trip = qty * $4.00)
- * Override per-trade via trade.commissionPerSide
+ * Returns { pl, fees, entryPrice, exitPrice, quantity, openQuantity }
+ * Commission default: configurable via getCommissionRate() ($/contract/side,
+ * round-trip = qty * rate * 2). Override per-trade via trade.commissionPerSide.
  */
 function calculateTradePL(trade) {
   const multiplier        = getFuturesMultiplier(trade.symbol);
-  const commissionPerSide = (trade.commissionPerSide != null) ? trade.commissionPerSide : 2.00;
+  const commissionPerSide = (trade.commissionPerSide != null) ? trade.commissionPerSide : getCommissionRate();
   const side              = (trade.side || 'long').toLowerCase();
 
   // -- Execution-based path --------------------------------------------------
@@ -213,6 +229,7 @@ function calculateTradePL(trade) {
     const entryQueue = entries.map(e => ({ price: e.price, qty: e.quantity || e.qty || 0 }));
 
     let realizedPL       = 0;
+    let totalFees         = 0;
     let totalEntryQty    = 0;
     let weightedEntrySum = 0;
     let totalExitQty     = 0;
@@ -232,7 +249,9 @@ function calculateTradePL(trade) {
           : (head.price - exit.price) * matched * multiplier;
 
         // Round-trip commission on matched qty only
-        realizedPL += rawPL - (matched * commissionPerSide * 2);
+        const matchedFees = matched * commissionPerSide * 2;
+        realizedPL += rawPL - matchedFees;
+        totalFees  += matchedFees;
 
         head.qty  -= matched;
         remaining -= matched;
@@ -248,6 +267,7 @@ function calculateTradePL(trade) {
 
     return {
       pl:          parseFloat(realizedPL.toFixed(2)),
+      fees:        parseFloat(totalFees.toFixed(2)),
       entryPrice:  parseFloat((totalEntryQty > 0 ? weightedEntrySum / totalEntryQty : 0).toFixed(2)),
       exitPrice:   parseFloat((totalExitQty  > 0 ? weightedExitSum  / totalExitQty  : 0).toFixed(2)),
       quantity:    totalEntryQty,
@@ -262,9 +282,11 @@ function calculateTradePL(trade) {
   const rawPL      = side === 'long'
     ? (exitPrice - entryPrice) * quantity * multiplier
     : (entryPrice - exitPrice) * quantity * multiplier;
+  const fees       = quantity * commissionPerSide * 2;
 
   return {
-    pl:          parseFloat((rawPL - (quantity * commissionPerSide * 2)).toFixed(2)),
+    pl:          parseFloat((rawPL - fees).toFixed(2)),
+    fees:        parseFloat(fees.toFixed(2)),
     entryPrice,
     exitPrice,
     quantity,
@@ -285,6 +307,7 @@ function normalizeTrade(trade) {
   return {
     ...trade,
     pl:           calc.pl,
+    fees:         calc.fees,
     entryPrice:   calc.entryPrice,
     exitPrice:    calc.exitPrice,
     quantity:     calc.quantity,
@@ -382,9 +405,10 @@ async function saveTrade() {
       executions.push({ type: 'exit',  price: exitPrice,  quantity, timestamp: exitTimestamp });
     }
 
-    // Run through the canonical P&L engine
-    const calc     = calculateTradePL({ symbol, side, executions, commissionPerSide: 2.00 });
+    // Run through the canonical P&L engine (uses the configured commission rate)
+    const calc     = calculateTradePL({ symbol, side, executions, commissionPerSide: getCommissionRate() });
     const pl       = calc.pl;
+    const fees     = calc.fees;
     const multiplier = getFuturesMultiplier(symbol);
 
     // R-multiple (uses avg entry from engine)
@@ -410,6 +434,7 @@ async function saveTrade() {
       exitPrice:  calc.exitPrice,
       stopLoss,
       pl,
+      fees,
       rMultiple,
       outcome,
       executions,   // execution array — drives all future P&L recalculations
@@ -541,7 +566,7 @@ function displayTrades() {
   const tbody = document.querySelector('#all-trades-table tbody');
   if (!tbody) return;
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-secondary);padding:2rem;">No trades found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-secondary);padding:2rem;">No trades found.</td></tr>';
     return;
   }
 
@@ -557,6 +582,7 @@ function displayTrades() {
       <td>${formatCurrency(t.entryPrice)}</td>
       <td>${formatCurrency(t.exitPrice)}</td>
       <td class="${t.pl >= 0 ? 'trade-positive' : 'trade-negative'}">${formatCurrency(t.pl)}</td>
+      <td class="trade-negative">${formatCurrency(t.fees)}</td>
       <td>${t.rMultiple !== null && t.rMultiple !== undefined ? t.rMultiple + 'R' : '—'}</td>
       <td>${t.strategy || '—'}</td>
       <td>${(t.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('')}</td>
@@ -2013,10 +2039,11 @@ function _csvBuildTradeObject(symbol, side, entryPrice, exitPrice, qty, entryISO
   ];
 
   // Run through the canonical engine — single source of truth for all P&L math
-  const draft = { symbol, side, executions: execs, commissionPerSide: 2.00 };
+  const rate  = getCommissionRate();
+  const draft = { symbol, side, executions: execs, commissionPerSide: rate };
   const calc  = calculateTradePL(draft);
   const pl    = calc.pl;
-  const commission = qty * 2.00 * 2; // for notes display only
+  const fees  = calc.fees; // actual dollar fees for this trade, matches the engine exactly
 
   const date      = entryISO ? entryISO.split('T')[0] : new Date().toISOString().split('T')[0];
   const entryTime = entryISO ? entryISO.split('T')[1] : null;
@@ -2037,12 +2064,13 @@ function _csvBuildTradeObject(symbol, side, entryPrice, exitPrice, qty, entryISO
     exitPrice:  calc.exitPrice,
     stopLoss:   null,
     pl,
+    fees,
     rMultiple:  null,
     outcome,
     executions: execs,
     strategy:   'CSV Import',
     tags:       ['imported'],
-    notes:      `Imported from Tradovate CSV ($${commission.toFixed(2)} commission) on ${new Date().toISOString().split('T')[0]}`
+    notes:      `Imported from Tradovate CSV ($${fees.toFixed(2)} commission) on ${new Date().toISOString().split('T')[0]}`
   };
 }
 
@@ -2294,7 +2322,12 @@ function setupSettingsButtons() {
           // Widget height control
           widgetHeight: document.getElementById('widget-height-slider')
             ? parseInt(document.getElementById('widget-height-slider').value)
-            : (window.userSettings.widgetHeight || 700)
+            : (window.userSettings.widgetHeight || 700),
+          // Commission rate ($/contract/side) used by the P&L engine for all
+          // new trades and CSV imports going forward
+          commissionPerSide: document.getElementById('setting-commission-per-side')
+            ? (parseFloat(document.getElementById('setting-commission-per-side').value) || DEFAULT_COMMISSION_PER_SIDE)
+            : (window.userSettings.commissionPerSide != null ? window.userSettings.commissionPerSide : DEFAULT_COMMISSION_PER_SIDE)
         };
         await db.collection('users').doc(currentUser).set({ settings }, { merge: true });
 
