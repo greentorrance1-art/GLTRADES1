@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GLTRADES - Trading Analytics Platform</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .tz-clock-badge {
+            font-size: 0.8rem;
+            color: var(--text-secondary, #6b7280);
+            background: var(--bg-secondary, #f3f4f6);
+            border-radius: 0.375rem;
+            padding: 0.35rem 0.6rem;
+            margin: 0.25rem 0 0.5rem 0;
+            display: inline-block;
+        }
+        .tz-clock-badge strong { color: var(--text-primary, #1f2937); }
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -123,6 +135,7 @@
                             <h4>📅 Economic Calendar</h4>
                             <button class="btn btn-secondary expand-btn" onclick="expandWidget('economic')">Expand</button>
                         </div>
+                        <div class="tz-clock-badge" id="tz-badge-economic"></div>
                         <div id="tv-economic-calendar" class="intelligence-widget"></div>
                     </div>
                     <div class="intelligence-card">
@@ -137,6 +150,7 @@
                             <h4>📰 Market News</h4>
                             <button class="btn btn-secondary expand-btn" onclick="expandWidget('news')">Expand</button>
                         </div>
+                        <div class="tz-clock-badge" id="tz-badge-news"></div>
                         <div id="tv-market-news" class="intelligence-widget"></div>
                     </div>
                 </div>
