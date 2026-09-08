@@ -2789,10 +2789,50 @@ function setupExpandModal() {
   }
 }
 
+/**
+ * startTimezoneClock()
+ * TradingView's lightweight Economic Calendar / News embeds (embed-widget-events.js,
+ * embed-widget-timeline.js) do NOT support a timezone override parameter — that only
+ * exists on TradingView's separate Advanced Charting Library. These embeds always
+ * display US Eastern Time for US-filtered events, and since they render inside a
+ * cross-origin iframe we cannot rewrite their times from our own JS.
+ *
+ * Instead, this shows a live "ET now / your time now" badge above each widget so
+ * every listed time (e.g. "13:00") has an immediate, correct conversion right next
+ * to it. Updates once a minute.
+ */
+function startTimezoneClock() {
+  const badgeIds = ['tz-badge-economic', 'tz-badge-news'];
+  const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time';
+
+  function tick() {
+    const now = new Date();
+    const etTime = now.toLocaleTimeString('en-US', {
+      timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit'
+    });
+    const localTime = now.toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit'
+    });
+
+    const html = `🕐 Times below are <strong>Eastern Time (ET)</strong> — right now: <strong>${etTime} ET</strong> · your time (${localZone}): <strong>${localTime}</strong>`;
+
+    badgeIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = html;
+    });
+  }
+
+  tick();
+  if (window._tzClockInterval) clearInterval(window._tzClockInterval);
+  window._tzClockInterval = setInterval(tick, 60000);
+}
+
 function renderMarketIntelligence() {
   // Use setTimeout to ensure containers are in DOM
   setTimeout(() => {
     console.log('📊 Rendering Market Intelligence widgets...');
+
+    startTimezoneClock(); // Show ET vs. local time — see note below
 
     // Economic Calendar
     const economicContainer = document.getElementById('tv-economic-calendar');
@@ -2810,8 +2850,7 @@ function renderMarketIntelligence() {
         height: '400',
         locale: 'en',
         importanceFilter: '-1,0,1',
-        countryFilter: 'us',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
+        countryFilter: 'us'
       });
       economicContainer.appendChild(economicScript);
     } else {
@@ -2837,8 +2876,7 @@ function renderMarketIntelligence() {
         displayMode: 'regular',
         width: '100%',
         height: '400',
-        locale: 'en',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
+        locale: 'en'
       });
       newsContainer.appendChild(newsScript);
     } else {
@@ -2883,86 +2921,39 @@ async function expandWidget(type) {
       height: '600',
       locale: 'en',
       importanceFilter: '-1,0,1',
-      countryFilter: 'us',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
+      countryFilter: 'us'
     });
     expandedContainer.appendChild(script);
   } else if (type === 'earnings') {
     // Show full week earnings calendar
     expandedContainer.innerHTML = '<div style="padding: 2rem; text-align: center; color: #9ca3af;">Loading week earnings...</div>';
 
-    const API_KEY = 'd6ku209r01qmopd26eu0d6ku209r01qmopd26eug';
-
     // Get Monday and Friday of current week
     const today = new Date();
     const dayOfWeek = today.getDay();
     const monday = new Date(today);
     monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-    const friday = new Date(monday);
-    friday.setDate(monday.getDate() + 4);
-
-    const from = monday.toISOString().split('T')[0];
-    const to = friday.toISOString().split('T')[0];
 
     try {
-      const response = await fetch(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${API_KEY}`);
-      const data = await response.json();
-
-      if (!data || !data.earningsCalendar || data.earningsCalendar.length === 0) {
-        expandedContainer.innerHTML = '<div style="padding: 2rem; text-align: center; color: #9ca3af;">No earnings this week</div>';
-        return;
-      }
-
-      // Filter: Only symbols that look like US tickers (1-5 letters, no dots/special chars)
-      const usEarnings = data.earningsCalendar.filter(earning => {
-        const symbol = earning.symbol || '';
-        return /^[A-Z]{1,5}$/.test(symbol) && earning.hour && (earning.hour === 'bmo' || earning.hour === 'amc');
-      });
-
-      // Fetch company names for all symbols
-      const symbolsToFetch = [...new Set(usEarnings.map(e => e.symbol))];
-      const companyNames = {};
+      // Nasdaq's calendar is per-day, so pull each weekday separately (Mon-Fri)
+      const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+      const byDate = {};
 
       await Promise.all(
-        symbolsToFetch.map(async symbol => {
-          try {
-            const profileResponse = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${API_KEY}`);
-            const profileData = await profileResponse.json();
-            // Check if profileData has valid name and it's not empty
-            if (profileData && profileData.name && profileData.name.trim() !== '') {
-              companyNames[symbol] = profileData.name;
-            } else {
-              companyNames[symbol] = 'N/A';
-            }
-          } catch {
-            companyNames[symbol] = 'N/A';
-          }
+        weekdays.map(async (_, i) => {
+          const date = new Date(monday);
+          date.setDate(monday.getDate() + i);
+          const dateStr = date.toISOString().split('T')[0];
+          const dayEarnings = await fetchNasdaqEarnings(dateStr);
+          byDate[dateStr] = {
+            preMarket:   dayEarnings.filter(e => e.time === 'bmo').sort((a, b) => a.symbol.localeCompare(b.symbol)),
+            afterMarket: dayEarnings.filter(e => e.time === 'amc').sort((a, b) => a.symbol.localeCompare(b.symbol))
+          };
         })
       );
 
-      // Group by date
-      const byDate = {};
-      usEarnings.forEach(earning => {
-        const date = earning.date;
-        if (!byDate[date]) {
-          byDate[date] = { preMarket: [], afterMarket: [] };
-        }
-        if (earning.hour === 'bmo') {
-          byDate[date].preMarket.push(earning);
-        } else if (earning.hour === 'amc') {
-          byDate[date].afterMarket.push(earning);
-        }
-      });
-
-      // Sort alphabetically within each group
-      Object.keys(byDate).forEach(date => {
-        byDate[date].preMarket.sort((a, b) => a.symbol.localeCompare(b.symbol));
-        byDate[date].afterMarket.sort((a, b) => a.symbol.localeCompare(b.symbol));
-      });
-
       let html = '<div style="padding: 1rem; max-height: 600px; overflow-y: auto;">';
 
-      const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
       const currentMonday = new Date(monday);
 
       for (let i = 0; i < 5; i++) {
@@ -2988,11 +2979,10 @@ async function expandWidget(type) {
         if (dayData.preMarket.length > 0) {
           html += '<div style="background: rgba(59, 130, 246, 0.03); border-radius: 6px; padding: 0.75rem;">';
           dayData.preMarket.forEach((earning, idx) => {
-            const companyName = companyNames[earning.symbol] || 'N/A';
             const border = idx < dayData.preMarket.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '';
             html += `<div style="padding: 0.5rem 0; ${border}">`;
-            html += `<div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">${earning.symbol} — ${companyName}</div>`;
-            html += `<div style="color: var(--text-secondary); font-size: 0.875rem;">EPS Est: ${earning.epsEstimate || 'N/A'} | Last ER Move: N/A</div>`;
+            html += `<div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">${earning.symbol} — ${earning.name}</div>`;
+            html += `<div style="color: var(--text-secondary); font-size: 0.875rem;">EPS Est: ${earning.epsForecast || 'N/A'} | Last Yr EPS: ${earning.lastYearEPS || 'N/A'}</div>`;
             html += '</div>';
           });
           html += '</div>';
@@ -3007,11 +2997,10 @@ async function expandWidget(type) {
         if (dayData.afterMarket.length > 0) {
           html += '<div style="background: rgba(16, 185, 129, 0.03); border-radius: 6px; padding: 0.75rem;">';
           dayData.afterMarket.forEach((earning, idx) => {
-            const companyName = companyNames[earning.symbol] || 'N/A';
             const border = idx < dayData.afterMarket.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '';
             html += `<div style="padding: 0.5rem 0; ${border}">`;
-            html += `<div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">${earning.symbol} — ${companyName}</div>`;
-            html += `<div style="color: var(--text-secondary); font-size: 0.875rem;">EPS Est: ${earning.epsEstimate || 'N/A'} | Last ER Move: N/A</div>`;
+            html += `<div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">${earning.symbol} — ${earning.name}</div>`;
+            html += `<div style="color: var(--text-secondary); font-size: 0.875rem;">EPS Est: ${earning.epsForecast || 'N/A'} | Last Yr EPS: ${earning.lastYearEPS || 'N/A'}</div>`;
             html += '</div>';
           });
           html += '</div>';
@@ -3043,8 +3032,7 @@ async function expandWidget(type) {
       displayMode: 'regular',
       width: '100%',
       height: '600',
-      locale: 'en',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
+      locale: 'en'
     });
     expandedContainer.appendChild(script);
   }
@@ -3057,8 +3045,42 @@ function closeExpandModal() {
 }
 
 // ========================================
-// EARNINGS CALENDAR - FINNHUB API
 // ========================================
+// EARNINGS CALENDAR - NASDAQ PUBLIC API (via free CORS proxy)
+// ========================================
+// Nasdaq's own calendar is the same source most "confirmed" earnings boards pull
+// from, and is meaningfully more complete/accurate for BMO/AMC timing than
+// Finnhub's free tier. It's free and needs no API key — but it also sends no CORS
+// headers, so a direct browser fetch gets blocked. Routing through a free public
+// CORS proxy (allorigins.win) works around that without standing up our own backend.
+// Also gives us the company name directly, so we no longer need a separate
+// per-symbol profile lookup call.
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
+async function fetchNasdaqEarnings(dateStr) {
+  const targetUrl = `https://api.nasdaq.com/api/calendar/earnings?date=${dateStr}`;
+  const response = await fetch(CORS_PROXY + encodeURIComponent(targetUrl));
+  const data = await response.json();
+  const rows = (data && data.data && data.data.calendar && data.data.calendar.rows) || [];
+
+  return rows
+    .filter(row => row && row.symbol)
+    .map(row => {
+      let time = 'unknown';
+      if (row.time === 'time-pre-market') time = 'bmo';
+      else if (row.time === 'time-after-hours') time = 'amc';
+      return {
+        symbol: row.symbol,
+        name: row.name || 'N/A',
+        time,
+        epsForecast: row.epsForecast,
+        noOfEsts: row.noOfEsts,
+        lastYearEPS: row.lastYearEPS,
+        lastYearRptDt: row.lastYearRptDt
+      };
+    });
+}
+
 let weekEarningsData = null; // Store week data for expand modal
 
 async function renderEarningsCalendar() {
@@ -3073,90 +3095,35 @@ async function renderEarningsCalendar() {
 
   try {
     const today = new Date();
-    const API_KEY = 'd6ku209r01qmopd26eu0d6ku209r01qmopd26eug';
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    // Get current week (Monday to Friday)
-    const dayOfWeek = today.getDay();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-    const friday = new Date(monday);
-    friday.setDate(monday.getDate() + 4);
-
-    const from = monday.toISOString().split('T')[0];
-    const to = friday.toISOString().split('T')[0];
-
-    const response = await fetch(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${API_KEY}`);
-    const weekData = await response.json();
-
-    if (!weekData || !weekData.earningsCalendar || weekData.earningsCalendar.length === 0) {
-      earningsContainer.innerHTML = '<div style="padding: 2rem; color: #9ca3af; text-align: center;">Loading earnings data...</div>';
-      return;
-    }
-
-    // Filter: Only symbols that look like US tickers (1-5 letters, no dots/special chars)
-    const allUsEarnings = weekData.earningsCalendar.filter(earning => {
-      const symbol = earning.symbol || '';
-      return /^[A-Z]{1,5}$/.test(symbol) && earning.hour && (earning.hour === 'bmo' || earning.hour === 'amc');
-    });
-
-    if (allUsEarnings.length === 0) {
-      earningsContainer.innerHTML = '<div style="padding: 2rem; color: #9ca3af; text-align: center;">Loading earnings data...</div>';
-      return;
-    }
-
-    // Try to find today's earnings first
-    const todayStr = today.toISOString().split('T')[0];
-    let usEarnings = allUsEarnings.filter(e => e.date === todayStr);
-    let displayDate = todayStr;
+    let usEarnings = [];
     let displayLabel = "Today's Earnings";
 
-    // If no earnings today, find the next available day in the week
-    if (usEarnings.length === 0) {
-      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      for (let i = 1; i <= 7; i++) {
-        const nextDay = new Date(today);
-        nextDay.setDate(today.getDate() + i);
-        const nextDayStr = nextDay.toISOString().split('T')[0];
-        const nextDayEarnings = allUsEarnings.filter(e => e.date === nextDayStr);
-        if (nextDayEarnings.length > 0) {
-          usEarnings = nextDayEarnings;
-          displayDate = nextDayStr;
-          displayLabel = `Next Earnings\n${daysOfWeek[nextDay.getDay()]}`;
-          break;
-        }
+    // Try today first, then walk forward up to 7 days for the next day with earnings
+    for (let i = 0; i <= 7; i++) {
+      const day = new Date(today);
+      day.setDate(today.getDate() + i);
+      const dayStr = day.toISOString().split('T')[0];
+
+      const dayEarnings = await fetchNasdaqEarnings(dayStr);
+      const filtered = dayEarnings.filter(e => e.time === 'bmo' || e.time === 'amc');
+
+      if (filtered.length > 0) {
+        usEarnings = filtered;
+        displayLabel = (i === 0) ? "Today's Earnings" : `Next Earnings\n${daysOfWeek[day.getDay()]}`;
+        break;
       }
     }
 
-    // If still no earnings found in the next week
     if (usEarnings.length === 0) {
       earningsContainer.innerHTML = '<div style="padding: 2rem; color: #9ca3af; text-align: center;">Loading earnings data...</div>';
       return;
     }
 
-    // Fetch company names for all symbols
-    const symbolsToFetch = [...new Set(usEarnings.map(e => e.symbol))];
-    const companyNames = {};
-
-    await Promise.all(
-      symbolsToFetch.map(async symbol => {
-        try {
-          const profileResponse = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${API_KEY}`);
-          const profileData = await profileResponse.json();
-          // Check if profileData has valid name and it's not empty
-          if (profileData && profileData.name && profileData.name.trim() !== '') {
-            companyNames[symbol] = profileData.name;
-          } else {
-            companyNames[symbol] = 'N/A';
-          }
-        } catch {
-          companyNames[symbol] = 'N/A';
-        }
-      })
-    );
-
     // Group by time (alphabetical sort since we don't have market cap data)
-    const preMarket = usEarnings.filter(e => e.hour === 'bmo').sort((a, b) => a.symbol.localeCompare(b.symbol));
-    const afterMarket = usEarnings.filter(e => e.hour === 'amc').sort((a, b) => a.symbol.localeCompare(b.symbol));
+    const preMarket = usEarnings.filter(e => e.time === 'bmo').sort((a, b) => a.symbol.localeCompare(b.symbol));
+    const afterMarket = usEarnings.filter(e => e.time === 'amc').sort((a, b) => a.symbol.localeCompare(b.symbol));
 
     const maxDisplay = 5;
 
@@ -3168,8 +3135,7 @@ async function renderEarningsCalendar() {
       html += '<div style="font-size: 0.75rem; color: #3b82f6; font-weight: 600; margin-bottom: 0.5rem;">PRE-MARKET</div>';
 
       preMarket.slice(0, maxDisplay).forEach(earning => {
-        const companyName = companyNames[earning.symbol] || 'N/A';
-        html += `<div style="padding: 0.25rem 0; color: var(--text-primary); font-size: 0.875rem;">${earning.symbol} — ${companyName}</div>`;
+        html += `<div style="padding: 0.25rem 0; color: var(--text-primary); font-size: 0.875rem;">${earning.symbol} — ${earning.name}</div>`;
       });
 
       if (preMarket.length > maxDisplay) {
@@ -3184,8 +3150,7 @@ async function renderEarningsCalendar() {
       html += '<div style="font-size: 0.75rem; color: #10b981; font-weight: 600; margin-bottom: 0.5rem;">AFTER-MARKET</div>';
 
       afterMarket.slice(0, maxDisplay).forEach(earning => {
-        const companyName = companyNames[earning.symbol] || 'N/A';
-        html += `<div style="padding: 0.25rem 0; color: var(--text-primary); font-size: 0.875rem;">${earning.symbol} — ${companyName}</div>`;
+        html += `<div style="padding: 0.25rem 0; color: var(--text-primary); font-size: 0.875rem;">${earning.symbol} — ${earning.name}</div>`;
       });
 
       if (afterMarket.length > maxDisplay) {
