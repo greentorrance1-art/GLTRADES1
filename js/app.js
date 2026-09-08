@@ -2338,6 +2338,18 @@ function setupSettingsButtons() {
 
         // Keep local copy in sync
         window.userSettings = settings;
+
+        // Re-run every already-loaded trade through the P&L engine so P/L and
+        // Fees reflect the new commission rate immediately, without a page reload.
+        // (Only trades with no per-trade commissionPerSide of their own — i.e. every
+        // CSV import and any trade saved before this rate existed — are affected.)
+        if (Array.isArray(window.trades)) {
+          window.trades = window.trades.map(t => normalizeTrade(t));
+        }
+        if (currentPage === 'trades')    displayTrades();
+        if (currentPage === 'dashboard') updateDashboard();
+        if (currentPage === 'reports')   updateReport();
+
         setupMarketOverviewUI();
         if (currentPage === 'dashboard') renderMarketOverviewWidgets();
 
