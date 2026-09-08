@@ -153,6 +153,13 @@ function showPage(page) {
   if (page === 'journal') displayJournal();
   if (page === 'university') displayGLUniversity();
   if (page === 'settings') {
+    // Pre-fill the commission rate field with the saved value (or the 0.94 default)
+    const commissionInput = document.getElementById('setting-commission-per-contract');
+    if (commissionInput) {
+      commissionInput.value = (window.userSettings && window.userSettings.commissionPerSide != null)
+        ? window.userSettings.commissionPerSide
+        : 0.94;
+    }
     console.log('📄 Settings page loaded');
     console.log('👤 Current user:', auth.currentUser);
     console.log('📧 Logged in email:', auth.currentUser ? auth.currentUser.email : 'NOT LOGGED IN');
@@ -186,31 +193,27 @@ function getFuturesMultiplier(symbol) {
   return 1;
 }
 
-// Fallback commission rate ($/contract/side) used only when no user setting
-// and no per-trade override is present. Configurable rate lives in
-// window.userSettings.commissionPerSide (see Settings > Trading Costs).
-const DEFAULT_COMMISSION_PER_SIDE = 2.00;
-
 /**
- * getCommissionRate()
- * Single source of truth for "what commission rate should new/recalculated
- * trades use." Checks user settings first, then falls back to the default.
+ * getDefaultCommissionPerSide()
+ * Pulls the user's real per-contract/per-side commission rate from Settings
+ * (window.userSettings.commissionPerSide). Falls back to 2.00 only if the
+ * user has never set a rate.
  */
-function getCommissionRate() {
-  const fromSettings = window.userSettings && window.userSettings.commissionPerSide;
-  const rate = parseFloat(fromSettings);
-  return !isNaN(rate) && rate >= 0 ? rate : DEFAULT_COMMISSION_PER_SIDE;
+function getDefaultCommissionPerSide() {
+  const rate = window.userSettings && window.userSettings.commissionPerSide;
+  return (rate != null && !isNaN(rate)) ? parseFloat(rate) : 2.00;
 }
 
 /**
  * calculateTradePL(trade)
- * Returns { pl, fees, entryPrice, exitPrice, quantity, openQuantity }
- * Commission default: configurable via getCommissionRate() ($/contract/side,
- * round-trip = qty * rate * 2). Override per-trade via trade.commissionPerSide.
+ * Returns { pl, entryPrice, exitPrice, quantity, openQuantity, fees }
+ * Commission rate comes from trade.commissionPerSide if set on the trade
+ * itself (so historical trades keep the rate they were calculated with),
+ * otherwise falls back to the user's configured Settings rate.
  */
 function calculateTradePL(trade) {
   const multiplier        = getFuturesMultiplier(trade.symbol);
-  const commissionPerSide = (trade.commissionPerSide != null) ? trade.commissionPerSide : getCommissionRate();
+  const commissionPerSide = (trade.commissionPerSide != null) ? trade.commissionPerSide : getDefaultCommissionPerSide();
   const side              = (trade.side || 'long').toLowerCase();
 
   // -- Execution-based path --------------------------------------------------
@@ -229,11 +232,11 @@ function calculateTradePL(trade) {
     const entryQueue = entries.map(e => ({ price: e.price, qty: e.quantity || e.qty || 0 }));
 
     let realizedPL       = 0;
-    let totalFees         = 0;
     let totalEntryQty    = 0;
     let weightedEntrySum = 0;
     let totalExitQty     = 0;
     let weightedExitSum  = 0;
+    let totalFees        = 0;
 
     for (const exit of exits) {
       let remaining = exit.quantity || exit.qty || 0;
@@ -249,9 +252,9 @@ function calculateTradePL(trade) {
           : (head.price - exit.price) * matched * multiplier;
 
         // Round-trip commission on matched qty only
-        const matchedFees = matched * commissionPerSide * 2;
-        realizedPL += rawPL - matchedFees;
-        totalFees  += matchedFees;
+        const tradeFees = matched * commissionPerSide * 2;
+        realizedPL += rawPL - tradeFees;
+        totalFees  += tradeFees;
 
         head.qty  -= matched;
         remaining -= matched;
@@ -267,11 +270,11 @@ function calculateTradePL(trade) {
 
     return {
       pl:          parseFloat(realizedPL.toFixed(2)),
-      fees:        parseFloat(totalFees.toFixed(2)),
       entryPrice:  parseFloat((totalEntryQty > 0 ? weightedEntrySum / totalEntryQty : 0).toFixed(2)),
       exitPrice:   parseFloat((totalExitQty  > 0 ? weightedExitSum  / totalExitQty  : 0).toFixed(2)),
       quantity:    totalEntryQty,
-      openQuantity: Math.max(0, totalEntryQty - totalExitQty)
+      openQuantity: Math.max(0, totalEntryQty - totalExitQty),
+      fees:        parseFloat(totalFees.toFixed(2))
     };
   }
 
@@ -282,14 +285,14 @@ function calculateTradePL(trade) {
   const rawPL      = side === 'long'
     ? (exitPrice - entryPrice) * quantity * multiplier
     : (entryPrice - exitPrice) * quantity * multiplier;
-  const fees       = quantity * commissionPerSide * 2;
+  const legacyFees = quantity * commissionPerSide * 2;
 
   return {
-    pl:          parseFloat((rawPL - fees).toFixed(2)),
-    fees:        parseFloat(fees.toFixed(2)),
+    pl:          parseFloat((rawPL - legacyFees).toFixed(2)),
     entryPrice,
     exitPrice,
     quantity,
+    fees:        parseFloat(legacyFees.toFixed(2)),
     openQuantity: 0
   };
 }
@@ -307,11 +310,11 @@ function normalizeTrade(trade) {
   return {
     ...trade,
     pl:           calc.pl,
-    fees:         calc.fees,
     entryPrice:   calc.entryPrice,
     exitPrice:    calc.exitPrice,
     quantity:     calc.quantity,
     openQuantity: calc.openQuantity,
+    fees:         calc.fees,
     outcome
   };
 }
@@ -405,10 +408,10 @@ async function saveTrade() {
       executions.push({ type: 'exit',  price: exitPrice,  quantity, timestamp: exitTimestamp });
     }
 
-    // Run through the canonical P&L engine (uses the configured commission rate)
-    const calc     = calculateTradePL({ symbol, side, executions, commissionPerSide: getCommissionRate() });
+    // Run through the canonical P&L engine (uses the user's configured commission rate)
+    const commissionPerSide = getDefaultCommissionPerSide();
+    const calc     = calculateTradePL({ symbol, side, executions, commissionPerSide });
     const pl       = calc.pl;
-    const fees     = calc.fees;
     const multiplier = getFuturesMultiplier(symbol);
 
     // R-multiple (uses avg entry from engine)
@@ -434,7 +437,8 @@ async function saveTrade() {
       exitPrice:  calc.exitPrice,
       stopLoss,
       pl,
-      fees,
+      fees: calc.fees,
+      commissionPerSide,   // rate this trade was actually calculated with
       rMultiple,
       outcome,
       executions,   // execution array — drives all future P&L recalculations
@@ -582,7 +586,7 @@ function displayTrades() {
       <td>${formatCurrency(t.entryPrice)}</td>
       <td>${formatCurrency(t.exitPrice)}</td>
       <td class="${t.pl >= 0 ? 'trade-positive' : 'trade-negative'}">${formatCurrency(t.pl)}</td>
-      <td class="trade-negative">${formatCurrency(t.fees)}</td>
+      <td class="trade-negative">${t.fees ? '$(' + t.fees.toFixed(2) + ')' : '—'}</td>
       <td>${t.rMultiple !== null && t.rMultiple !== undefined ? t.rMultiple + 'R' : '—'}</td>
       <td>${t.strategy || '—'}</td>
       <td>${(t.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('')}</td>
@@ -2039,11 +2043,12 @@ function _csvBuildTradeObject(symbol, side, entryPrice, exitPrice, qty, entryISO
   ];
 
   // Run through the canonical engine — single source of truth for all P&L math
-  const rate  = getCommissionRate();
-  const draft = { symbol, side, executions: execs, commissionPerSide: rate };
+  // Uses the user's configured commission rate (Settings) instead of a hardcoded default
+  const commissionPerSide = getDefaultCommissionPerSide();
+  const draft = { symbol, side, executions: execs, commissionPerSide };
   const calc  = calculateTradePL(draft);
   const pl    = calc.pl;
-  const fees  = calc.fees; // actual dollar fees for this trade, matches the engine exactly
+  const commission = calc.fees; // for notes display — actual fees charged on this trade
 
   const date      = entryISO ? entryISO.split('T')[0] : new Date().toISOString().split('T')[0];
   const entryTime = entryISO ? entryISO.split('T')[1] : null;
@@ -2064,13 +2069,14 @@ function _csvBuildTradeObject(symbol, side, entryPrice, exitPrice, qty, entryISO
     exitPrice:  calc.exitPrice,
     stopLoss:   null,
     pl,
-    fees,
+    fees:       calc.fees,
+    commissionPerSide,   // rate this trade was actually calculated with
     rMultiple:  null,
     outcome,
     executions: execs,
     strategy:   'CSV Import',
     tags:       ['imported'],
-    notes:      `Imported from Tradovate CSV ($${fees.toFixed(2)} commission) on ${new Date().toISOString().split('T')[0]}`
+    notes:      `Imported from Tradovate CSV ($${commission.toFixed(2)} commission) on ${new Date().toISOString().split('T')[0]}`
   };
 }
 
@@ -2315,6 +2321,10 @@ function setupSettingsButtons() {
           brandColor:         document.getElementById('setting-brand-color').value,
           educationalEnabled: document.getElementById('setting-educational').checked,
           sampleData:         document.getElementById('setting-sample-data').checked,
+          // Real per-contract, per-side commission rate (replaces the old $2.00 hardcoded default)
+          commissionPerSide:  document.getElementById('setting-commission-per-contract')
+            ? parseFloat(document.getElementById('setting-commission-per-contract').value) || 0
+            : getDefaultCommissionPerSide(),
           // Market overview watchlist (comma-separated TradingView symbols)
           marketOverviewSymbols: document.getElementById('setting-market-symbols')
             ? document.getElementById('setting-market-symbols').value
@@ -2322,12 +2332,7 @@ function setupSettingsButtons() {
           // Widget height control
           widgetHeight: document.getElementById('widget-height-slider')
             ? parseInt(document.getElementById('widget-height-slider').value)
-            : (window.userSettings.widgetHeight || 700),
-          // Commission rate ($/contract/side) used by the P&L engine for all
-          // new trades and CSV imports going forward
-          commissionPerSide: document.getElementById('setting-commission-per-side')
-            ? (parseFloat(document.getElementById('setting-commission-per-side').value) || DEFAULT_COMMISSION_PER_SIDE)
-            : (window.userSettings.commissionPerSide != null ? window.userSettings.commissionPerSide : DEFAULT_COMMISSION_PER_SIDE)
+            : (window.userSettings.widgetHeight || 700)
         };
         await db.collection('users').doc(currentUser).set({ settings }, { merge: true });
 
