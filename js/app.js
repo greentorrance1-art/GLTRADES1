@@ -2810,7 +2810,8 @@ function renderMarketIntelligence() {
         height: '400',
         locale: 'en',
         importanceFilter: '-1,0,1',
-        countryFilter: 'us'
+        countryFilter: 'us',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
       });
       economicContainer.appendChild(economicScript);
     } else {
@@ -2836,7 +2837,8 @@ function renderMarketIntelligence() {
         displayMode: 'regular',
         width: '100%',
         height: '400',
-        locale: 'en'
+        locale: 'en',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
       });
       newsContainer.appendChild(newsScript);
     } else {
@@ -2881,7 +2883,8 @@ async function expandWidget(type) {
       height: '600',
       locale: 'en',
       importanceFilter: '-1,0,1',
-      countryFilter: 'us'
+      countryFilter: 'us',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
     });
     expandedContainer.appendChild(script);
   } else if (type === 'earnings') {
@@ -3040,7 +3043,8 @@ async function expandWidget(type) {
       displayMode: 'regular',
       width: '100%',
       height: '600',
-      locale: 'en'
+      locale: 'en',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
     });
     expandedContainer.appendChild(script);
   }
